@@ -1,0 +1,32 @@
+# Simplified requirements for Agent Airbnb
+# Use this if the main requirements.txt has conflicts
+
+# Core FastAPI
+fastapi
+uvicorn[standard]
+
+# Database
+pymysql
+sqlalchemy
+
+# Environment
+python-dotenv
+
+# Data validation
+pydantic
+
+# HTTP requests
+httpx
+requests
+
+# AI and LangChain (compatible versions)
+langchain
+langchain-openai
+langchain-community
+openai
+
+# Web search
+tavily-python
+
+# File handling
+python-multipart
