@@ -1,0 +1,19 @@
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=agent_airbnb
+DB_USER=root
+DB_PASSWORD=your_password
+
+# OpenAI API Key (for LangChain)
+OPENAI_API_KEY=your_openai_api_key
+
+# Tavily API Key
+TAVILY_API_KEY=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
+
+# Weather API (OpenWeatherMap)
+WEATHER_API_KEY=your_weather_api_key
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000

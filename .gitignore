@@ -1,4 +1,14 @@
-# Byte-compiled / optimized / DLL files
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,6 +37,10 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# PyInstaller
+*.manifest
+*.spec
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -43,6 +57,28 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -63,7 +99,7 @@ poetry.lock
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
 
-# Celery stuff
+# celery beat schedule files
 celerybeat-schedule
 celerybeat.pid
 
@@ -97,8 +133,38 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# macOS
-.DS_Store
-
-# VS Code
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Logs
+*.log
+logs/
+
+# API keys and secrets
+.env
+.env.local
+.env.production
+.env.staging
+
+# External repositories
+langchain-academy/
+LangGraph Course/
