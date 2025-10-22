@@ -1,0 +1,259 @@
+@import url('https://fonts.googleapis.com/css2?family=Cereal:wght@400;500;600;700;800&display=swap');
+
+/* Overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  z-index: 1990;
+  animation: fadeIn 0.25s ease;
+}
+
+/* Sidebar Container */
+.sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 400px;
+  max-width: 90vw;
+  background-color: #ffffff;
+  box-shadow: -12px 0 28px rgba(0, 0, 0, 0.16);
+  z-index: 2000;
+  overflow-y: auto;
+  animation: slideInFromRight 0.25s ease;
+  font-family: 'Cereal', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+}
+
+/* Sidebar Header */
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid #e5e5e5;
+  position: sticky;
+  top: 0;
+  background-color: #ffffff;
+  z-index: 1;
+}
+
+.sidebar-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  color: #222222;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #222222;
+  padding: 8px;
+  transition: color 0.2s ease;
+}
+
+.close-btn:hover {
+  color: #ff385c;
+}
+
+/* Sidebar Content */
+.sidebar-content {
+  padding: 24px;
+}
+
+/* Menu Sections */
+.menu-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-divider {
+  height: 1px;
+  background-color: #e5e5e5;
+  margin: 16px 0;
+}
+
+.menu-section:last-of-type .menu-divider {
+  display: none;
+}
+
+/* New to Airbnb Card */
+.new-to-airbnb-card {
+  background-color: #f7f7f7;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.card-images {
+  display: none;
+}
+
+.new-to-airbnb-card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #222222;
+  margin: 0 0 12px 0;
+}
+
+.new-to-airbnb-card p {
+  font-size: 14px;
+  color: #717171;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.get-started-btn {
+  padding: 8px 20px;
+  background-color: transparent;
+  border: 2px solid #222222;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #222222;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Cereal', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+}
+
+.get-started-btn:hover {
+  background-color: #f7f7f7;
+  border-color: #ff385c;
+  color: #ff385c;
+}
+
+/* Menu Items */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #e5e5e5;
+  cursor: pointer;
+  text-align: left;
+  font-size: 15px;
+  color: #222222;
+  transition: all 0.2s ease;
+  font-family: 'Cereal', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-weight: 500;
+}
+
+.menu-item:last-child {
+  border-bottom: none;
+}
+
+.menu-item:hover {
+  color: #ff385c;
+  padding-left: 8px;
+}
+
+.menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.menu-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke: #222222;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  transition: stroke 0.2s ease;
+}
+
+.menu-item.logout {
+  color: #ff385c;
+}
+
+.menu-item.logout:hover {
+  color: #d32f2f;
+}
+
+.menu-item:hover .menu-icon svg {
+  stroke: #ff385c;
+}
+
+.menu-item.logout .menu-icon svg {
+  stroke: #ff385c;
+}
+
+.menu-item.logout:hover .menu-icon svg {
+  stroke: #d32f2f;
+}
+
+/* Scrollbar Styling */
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background-color: #d0d0d0;
+  border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: #b0b0b0;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 85vw;
+    max-width: 360px;
+  }
+
+  .menu-item {
+    padding: 12px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    width: 90vw;
+  }
+
+  .sidebar-content {
+    padding: 20px;
+  }
+
+  .menu-item {
+    font-size: 14px;
+  }
+}
