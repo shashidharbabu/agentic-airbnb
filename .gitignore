@@ -168,3 +168,62 @@ logs/
 # External repositories
 langchain-academy/
 LangGraph Course/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.npm
+.yarn-integrity
+
+# OAuth & Firebase Secrets (CRITICAL - NEVER COMMIT)
+OAuthConfig.json
+FirebaseAdminAccess.json
+firebaseConfig.js
+firebase-*.json
+*-firebase-adminsdk-*.json
+
+# Uploads and User Generated Content
+uploads/
+**/uploads/
+property-photos/
+
+# Testing docs (contain sensitive test data)
+*_TESTING.md
+PHASE*.md
+FIREBASE_PHONE_SETUP.md
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Local environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Documentation with potential sensitive info
+OTP_UI_UPDATE.md
+WARNING_FIX_SUMMARY.md
+
+# PDF files (may contain assignment details)
+*.pdf
+
+# Lab files
+Lab*.txt
+Lab*.pdf

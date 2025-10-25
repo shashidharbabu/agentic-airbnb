@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Cereal:wght@400;500;600;700;800&display=swap');
+
+/* Global base to match Airbnb-like typography and spacing */
+:root{
+  --text:#111;
+  --font-family: 'Cereal', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+}
+html, body, #root{ height:100%; }
+body{
+  margin:0;
+  color:var(--text);
+  font-family: var(--font-family);
+  background:#fff;
+}
+/* Remove any accidental centering from templates */
+#root, body, main{ text-align:left; }
+
+h1,h2,h3{ font-weight:800; letter-spacing:-.02em; margin:0 0 12px; }
+
+button{ cursor:pointer; font-weight:600; border-radius:12px; font-family: var(--font-family); }
+
+input, select, textarea{
+  font: inherit;
+  font-family: var(--font-family);
+  color: inherit;
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:0 12px;
+  height:48px;
+  outline:none;
+}
+
+/* Footer bar spacing */
+footer{ font-size:14px; color:#717171; }
+
+/* Animations */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Hover effects for better UX */
+.property-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.booking-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}

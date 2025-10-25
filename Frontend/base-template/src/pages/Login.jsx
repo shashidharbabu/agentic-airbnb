@@ -1,16 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/Airbnb_logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-  const btnRef = useRef(null);
-
-  const [hostOpen, setHostOpen] = useState(false);
-  const [hostChoice, setHostChoice] = useState(null); 
 
   const [step, setStep] = useState("auth"); 
   const [email, setEmail] = useState("");
@@ -22,31 +15,6 @@ export default function Login() {
 
   const [commitOpen, setCommitOpen] = useState(false);
 
-  useEffect(() => {
-    function onDocClick(e) {
-      if (
-        menuRef.current &&
-        btnRef.current &&
-        !menuRef.current.contains(e.target) &&
-        !btnRef.current.contains(e.target)
-      ) {
-        setMenuOpen(false);
-      }
-    }
-    function onEsc(e) {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        setHostOpen(false);
-        setCommitOpen(false);
-      }
-    }
-    document.addEventListener("click", onDocClick);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("click", onDocClick);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, []);
 
   const emailOk = /^\S+@\S+\.\S+$/.test(email);
   const pwdOk = pwd.length >= 6;
@@ -61,60 +29,6 @@ export default function Login() {
 
   return (
     <>
-      <header className="header">
-        <div className="header-inner">
-          <a href="/" className="logo" aria-label="Airbnb home">
-            <img src={logo} alt="Airbnb" />
-          </a>
-
-          <div className="header-right">
-            <button className="host-link" type="button" onClick={() => setHostOpen(true)}>
-              Become a host
-            </button>
-
-            <button
-              ref={btnRef}
-              type="button"
-              className="menu-btn"
-              aria-label="Open menu"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
-            >
-              <span className="hamburger-lines" aria-hidden>
-                <span></span><span></span><span></span>
-              </span>
-            </button>
-
-            <div
-              ref={menuRef}
-              className={`menu ${menuOpen ? "open" : ""}`}
-              role="menu"
-            >
-              <button
-                className="menu-item"
-                role="menuitem"
-                type="button"
-                onClick={() => { setMenuOpen(false); setHostOpen(true); }}
-              >
-                Become a host
-              </button>
-              <p className="menu-subtext">
-                It&apos;s easy to start hosting and earn extra income.
-              </p>
-              <a href="#" className="menu-item" role="menuitem">Refer a host</a>
-              <button
-                className="menu-item"
-                role="menuitem"
-                type="button"
-                onClick={() => navigate("/login")}
-              >
-                Log in or Sign up
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
 
       {step === "finish" ? (
         <div className="login-page">
@@ -227,28 +141,16 @@ export default function Login() {
         </div>
       )}
 
-      {hostOpen && (
-        <HostModal
-          open={hostOpen}
-          selected={hostChoice}
-          onSelect={setHostChoice}
-          onClose={() => setHostOpen(false)}
-          onNext={() => {
-            if (!hostChoice) return;
-            setHostOpen(false);
-            setStep("auth"); 
-            navigate(`/login?hostType=${encodeURIComponent(hostChoice)}`, {
-              replace: true,
-            });
-          }}
-        />
-      )}
 
       {commitOpen && (
         <CommitmentModal
           open={commitOpen}
           onClose={() => setCommitOpen(false)}
-          onAgree={() => setCommitOpen(false)}
+          onAgree={() => {
+            setCommitOpen(false);
+            // Redirect to host dashboard
+            window.location.href = 'http://localhost:5174';
+          }}
           onDecline={() => setCommitOpen(false)}
         />
       )}
@@ -256,52 +158,6 @@ export default function Login() {
   );
 }
 
-function HostModal({ open, selected, onSelect, onClose, onNext }) {
-  if (!open) return null;
-  const cards = [
-    { id: "home", label: "Home", emoji: "🏠" },
-    { id: "apartment", label: "Apartment", emoji: "🏢" },
-    { id: "villa", label: "Villa", emoji: "🏡" },
-  ];
-  return (
-    <div className="host-modal" role="dialog" aria-modal="true" aria-labelledby="host-title">
-      <div className="host-overlay" onClick={onClose} />
-      <div className="host-dialog">
-        <button className="host-close" type="button" aria-label="Close" onClick={onClose}>✕</button>
-        <h3 id="host-title" className="host-title">What would you like to host?</h3>
-
-        <div className="host-grid">
-          {cards.map((c) => {
-            const isSel = selected === c.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                className={`host-card ${isSel ? "selected" : ""}`}
-                onClick={() => onSelect(c.id)}
-                aria-pressed={isSel}
-              >
-                <div className="host-emoji" aria-hidden>{c.emoji}</div>
-                <div className="host-label">{c.label}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="host-actions">
-          <button
-            type="button"
-            className="host-next"
-            disabled={!selected}
-            onClick={onNext}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function CommitmentModal({ open, onClose, onAgree, onDecline }) {
   if (!open) return null;
