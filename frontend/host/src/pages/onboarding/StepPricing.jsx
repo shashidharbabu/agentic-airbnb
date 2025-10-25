@@ -33,10 +33,26 @@ export default function StepPricing(){
 
   return (
     <OnboardingLayout title="Set your price per night" footer={footer}>
-      <div>
-        <input type="number" value={price} onChange={e=>{ setPrice(e.target.value); if (error) setError('') }} style={{ height: 48, padding:'0 12px', borderRadius:12, border:'1px solid #ddd', width:240 }} />
+      <div style={{ display:'flex', justifyContent:'center' }}>
+        <input
+          type="number"
+          value={price}
+          onChange={e=>{ setPrice(e.target.value); if (error) setError('') }}
+          style={{ height: 48, padding:'0 12px', borderRadius:12, border:'1px solid #ddd', width:240, textAlign:'center' }}
+        />
       </div>
-      {error && <div style={{ color:'#d93025', marginTop:16, fontFamily:"'Airbnb Cereal VF', Circular, -apple-system, 'system-ui', Roboto, 'Helvetica Neue', sans-serif" }}>{error}</div>}
+      {error && (
+        <div
+          style={{
+            color:'#d93025',
+            marginTop:16,
+            fontFamily:"'Airbnb Cereal VF', Circular, -apple-system, 'system-ui', Roboto, 'Helvetica Neue', sans-serif",
+            textAlign:'center'
+          }}
+        >
+          {error}
+        </div>
+      )}
     </OnboardingLayout>
   )
 }

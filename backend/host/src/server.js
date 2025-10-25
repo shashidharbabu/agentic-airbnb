@@ -13,6 +13,7 @@ const passport = require('./middleware/passport');
 const app = express();
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173';
+const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'airbnb_host.sid';
 
 // Configure MySQL session store
 const sessionStore = new MySQLStore({
@@ -35,14 +36,14 @@ app.use(express.json());
 app.use(morgan('dev'));
 
 app.use(session({
-  name: 'airbnb_host.sid',
+  name: SESSION_COOKIE_NAME,
   secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production', // Auto-secure in production
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   }

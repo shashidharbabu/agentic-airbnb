@@ -4,18 +4,29 @@ const Joi = require('joi');
 const { pool } = require('../db');
 const passport = require('../middleware/passport');
 const admin = require('../middleware/firebase');
+const { ensureAuth } = require('../middleware/auth');
 
 const router = express.Router();
+const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'airbnb_host.sid';
 
 const signupSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).max(128).required(),
-  name: Joi.string().min(1).max(255).required()
+  name: Joi.string().min(1).max(255).required(),
+  phone: Joi.string().min(7).max(20).required(),
+  location: Joi.string().min(2).max(255).required()
 });
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).max(128).required()
+});
+
+const updateProfileSchema = Joi.object({
+  name: Joi.string().min(1).max(255).required(),
+  phone: Joi.string().min(7).max(20).required(),
+  location: Joi.string().min(2).max(255).required(),
+  bio: Joi.string().max(1000).allow('').optional()
 });
 
 router.post('/signup', async (req, res) => {
@@ -24,7 +35,9 @@ router.post('/signup', async (req, res) => {
     if (error) return res.status(400).json({ error: error.message });
 
     const email = value.email.toLowerCase().trim();
-    const name = value.name.trim();
+  const name = value.name.trim();
+  const phone = value.phone.trim();
+  const location = value.location.trim();
     const passwordHash = await bcrypt.hash(value.password, 10);
 
     const conn = await pool.getConnection();
@@ -32,12 +45,15 @@ router.post('/signup', async (req, res) => {
       const [rows] = await conn.execute('SELECT id FROM owners WHERE email = :email', { email });
       if (rows.length > 0) return res.status(409).json({ error: 'email_in_use' });
 
+      const [phoneRows] = await conn.execute('SELECT id FROM owners WHERE phone = :phone', { phone });
+      if (phoneRows.length > 0) return res.status(409).json({ error: 'phone_in_use' });
+
       const [result] = await conn.execute(
-        'INSERT INTO owners (email, password_hash, name) VALUES (:email, :password_hash, :name)',
-        { email, password_hash: passwordHash, name }
+        'INSERT INTO owners (email, password_hash, name, phone, location) VALUES (:email, :password_hash, :name, :phone, :location)',
+        { email, password_hash: passwordHash, name, phone, location }
       );
 
-      const owner = { id: result.insertId, email, name };
+  const owner = { id: result.insertId, email, name, phone, location, bio: '' };
       req.session.owner = owner;
       return res.json({ owner });
     } finally {
@@ -58,13 +74,23 @@ router.post('/login', async (req, res) => {
 
     const conn = await pool.getConnection();
     try {
-      const [rows] = await conn.execute('SELECT id, email, name, password_hash FROM owners WHERE email = :email', { email });
+      const [rows] = await conn.execute(
+        'SELECT id, email, name, phone, location, password_hash, about FROM owners WHERE email = :email',
+        { email }
+      );
       if (rows.length === 0) return res.status(401).json({ error: 'invalid_credentials' });
       const row = rows[0];
       const ok = await bcrypt.compare(value.password, row.password_hash);
       if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
 
-      const owner = { id: row.id, email: row.email, name: row.name };
+      const owner = {
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        phone: row.phone,
+        location: row.location,
+        bio: row.about || ''
+      };
       req.session.owner = owner;
       return res.json({ owner });
     } finally {
@@ -76,22 +102,75 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.post('/logout', async (req, res) => {
+router.post('/logout', (req, res) => {
+  const finalize = () => {
+    res.clearCookie(SESSION_COOKIE_NAME);
+    return res.sendStatus(204);
+  };
+
+  if (!req.session) {
+    return finalize();
+  }
+
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Failed to destroy session during logout:', err);
+      return res.status(500).json({ error: 'internal_error' });
+    }
+    finalize();
+  });
+});
+
+router.get('/me', ensureAuth, (req, res) => {
+  const owner = req.session.owner || req.user || null;
+  return res.json({ owner });
+});
+
+router.put('/profile', ensureAuth, async (req, res) => {
   try {
-    req.session.destroy(() => {
-      res.clearCookie('airbnb_host.sid');
-      return res.json({ ok: true });
-    });
+    const { error, value } = updateProfileSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.message });
+
+    const ownerId = req.session.owner?.id;
+    if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
+
+  const name = value.name.trim();
+  const phone = value.phone.trim();
+  const location = value.location.trim();
+  const bio = typeof value.bio === 'string' ? value.bio.trim() : '';
+
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        'SELECT id FROM owners WHERE phone = :phone AND id != :id',
+        { phone, id: ownerId }
+      );
+      if (rows.length > 0) {
+        return res.status(409).json({ error: 'phone_in_use' });
+      }
+
+      await conn.execute(
+        'UPDATE owners SET name = :name, phone = :phone, location = :location, about = :bio WHERE id = :id',
+        { name, phone, location, bio, id: ownerId }
+      );
+
+      const updatedOwner = {
+        ...req.session.owner,
+        name,
+        phone,
+        location,
+        bio
+      };
+
+      req.session.owner = updatedOwner;
+      return res.json({ owner: updatedOwner });
+    } finally {
+      conn.release();
+    }
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });
   }
-});
-
-router.get('/me', (req, res) => {
-  // Support both Passport user and session owner
-  const owner = req.user || req.session.owner || null;
-  return res.json({ owner });
 });
 
 // ========== Google OAuth Routes ==========

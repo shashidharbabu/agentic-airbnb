@@ -28,7 +28,7 @@ export default function StepBooking(){
 
   return (
     <OnboardingLayout title="Choose how guests book" footer={footer}>
-      <div style={{ display:'grid', gap:16, maxWidth:640 }}>
+      <div style={{ display:'grid', gap:16, maxWidth:640, margin:'0 auto', width:'100%' }}>
         {[
           { key:'APPROVAL', title:'Approve requests', subtitle:'You’ll review each request before guests can book.' },
           { key:'INSTANT', title:'Instant Book', subtitle:'Guests can book automatically without approval.' }

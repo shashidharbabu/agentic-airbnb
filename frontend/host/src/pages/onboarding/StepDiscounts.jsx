@@ -27,7 +27,7 @@ export default function StepDiscounts(){
 
   return (
     <OnboardingLayout title="Add premiums and discounts" footer={footer}>
-      <div style={{ display:'grid', gap:12, maxWidth:420 }}>
+      <div style={{ display:'grid', gap:12, maxWidth:420, margin:'0 auto', width:'100%' }}>
         <label>Weekend premium %
           <input type="number" value={weekendPremium} onChange={e=>setWeekendPremium(e.target.value)} style={{ height: 48, padding:'0 12px', borderRadius:12, border:'1px solid #ddd', width:'100%' }} />
         </label>

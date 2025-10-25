@@ -5,6 +5,28 @@ import AgentPanel from '../components/AgentPanel'
 import '../styles/Listings.css'
 import { currencyFormatter, transformProperty as transformListingProperty } from '../utils/listings'
 
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+const formatDate = (value) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return dateFormatter.format(date)
+}
+
+const formatRange = (start, end) => {
+  if (!start && !end) return 'Dates TBD'
+  if (!start) return `Until ${formatDate(end)}`
+  if (!end) return `From ${formatDate(start)}`
+  return `${formatDate(start)} → ${formatDate(end)}`
+}
+
+const getTravelerInitial = (name, email) => {
+  if (name && name.trim().length > 0) return name.trim().charAt(0).toUpperCase()
+  if (email && email.trim().length > 0) return email.trim().charAt(0).toUpperCase()
+  return 'G'
+}
+
 export default function HostDashboard() {
   const nav = useNavigate()
   const [owner, setOwner] = useState(null)
@@ -364,8 +386,17 @@ export default function HostDashboard() {
                 </p>
               </div>
             ) : (
-              pending.map(b => (
-                <div key={b.id} style={{ 
+              pending.map((booking) => {
+                const travelerName = booking.traveler?.name || 'Guest'
+                const travelerEmail = booking.traveler?.email || ''
+                const guests = typeof booking.guests === 'number' ? booking.guests : null
+                const propertyName = booking.property?.name || 'Untitled listing'
+                const propertyLocation = booking.property?.location || ''
+                const stayRange = formatRange(booking.startDate, booking.endDate)
+                const initial = getTravelerInitial(travelerName, travelerEmail)
+
+                return (
+                <div key={booking.id} style={{ 
                   border: '1px solid #e5e7eb', 
                   borderRadius: 16, 
                   padding: 20, 
@@ -390,16 +421,26 @@ export default function HostDashboard() {
                       fontWeight: 600,
                       fontSize: 16
                     }}>
-                      {b.traveler_name?.charAt(0)?.toUpperCase() || 'G'}
+                      {initial}
                     </div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 16, color: '#222' }}>
-                        {b.traveler_name}
+                        {travelerName}
                       </div>
+                      {travelerEmail ? (
+                        <div style={{ color: '#6b7280', fontSize: 12 }}>
+                          {travelerEmail}
+                        </div>
+                      ) : null}
                       <div style={{ color: '#6b7280', fontSize: 12 }}>
-                        {b.guests} {b.guests === 1 ? 'guest' : 'guests'}
+                        {guests !== null ? `${guests} ${guests === 1 ? 'guest' : 'guests'}` : 'Guest count TBD'}
                       </div>
                     </div>
+                  </div>
+
+                  <div style={{ marginBottom: 12, color: '#4b5563', fontSize: 13 }}>
+                    <strong style={{ display: 'block', color: '#1f2937', fontSize: 14 }}>{propertyName}</strong>
+                    {propertyLocation ? <span>{propertyLocation}</span> : null}
                   </div>
                   
                   <div style={{ 
@@ -410,12 +451,12 @@ export default function HostDashboard() {
                     background: '#f7f7f7',
                     borderRadius: 8
                   }}>
-                    📅 {b.start_date?.slice(0,10)} → {b.end_date?.slice(0,10)}
+                    📅 {stayRange}
                   </div>
                   
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button 
-                      onClick={() => handleBookingAction(b.id, 'accept')}
+                      onClick={() => handleBookingAction(booking.id, 'accept')}
                       style={{ 
                         flex: 1,
                         background: '#FF385C', 
@@ -434,7 +475,7 @@ export default function HostDashboard() {
                       Accept
                     </button>
                     <button 
-                      onClick={() => handleBookingAction(b.id, 'cancel')}
+                      onClick={() => handleBookingAction(booking.id, 'cancel')}
                       style={{ 
                         flex: 1,
                         border: '1px solid #d1d5db', 
@@ -454,7 +495,8 @@ export default function HostDashboard() {
                     </button>
                   </div>
                 </div>
-              ))
+                )
+              })
             )}
           </div>
           

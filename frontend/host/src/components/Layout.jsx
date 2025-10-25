@@ -2,21 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/LayoutHeader.css';
 import Sidebar from './Sidebar';
+import { useAuth } from '../context/AuthContext';
 
 export default function Layout({ children }) {
-  const [profileDropdown, setProfileDropdown] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-  
-  // Get user info from localStorage (set during login)
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  const userName = userInfo.displayName || userInfo.email || 'Host';
-
-  const handleLogout = () => {
-    localStorage.removeItem('userInfo');
-    localStorage.removeItem('authToken');
-    navigate('/login');
-  };
+  const { currentUser } = useAuth();
+  const userName = currentUser?.name || currentUser?.email || 'Host';
 
   const menuIcons = {
     listings: (
@@ -34,14 +26,6 @@ export default function Layout({ children }) {
         <path d="M4.5 7.5h15" />
         <path d="M5.25 20.25h13.5a1.5 1.5 0 0 0 1.5-1.5V7.5H3.75v11.25a1.5 1.5 0 0 0 1.5 1.5Z" />
         <path d="m9.75 13.5 1.875 1.875L14.25 12.75" />
-      </svg>
-    ),
-    requests: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M20.25 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6.75" />
-        <path d="M4.5 6.75 8.25 3h7.5l3.75 3.75" />
-        <path d="M4.5 6.75h15.75" />
-        <path d="m7.5 11.25 4.5 3 4.5-3" />
       </svg>
     ),
     calendar: (
@@ -62,7 +46,6 @@ export default function Layout({ children }) {
   const menuItems = [
     { label: 'Listings', path: '/host/listings', icon: menuIcons.listings },
     { label: 'Bookings', path: '/host/bookings', icon: menuIcons.bookings },
-    { label: 'Requests', path: '/host/requests', icon: menuIcons.requests },
     { label: 'Calendar', path: '/host/calendar', icon: menuIcons.calendar },
   ];
 
@@ -101,42 +84,15 @@ export default function Layout({ children }) {
               Switch to traveling
             </button>
 
-            {/* Profile Dropdown */}
-            <div className="profile-dropdown">
-              <button
-                className="profile-trigger"
-                onClick={() => setProfileDropdown(!profileDropdown)}
-              >
-                <div className="profile-avatar">
-                  {userName.charAt(0).toUpperCase()}
-                </div>
-              </button>
-
-              {profileDropdown && (
-                <div className="dropdown-menu">
-                  <div className="dropdown-header">
-                    <strong>Host</strong>
-                  </div>
-                  <hr />
-                  <button
-                    className="dropdown-item"
-                    onClick={() => {
-                      setSidebarOpen(true);
-                      setProfileDropdown(false);
-                    }}
-                  >
-                    Menu
-                  </button>
-                  <hr />
-                  <button
-                    className="dropdown-item logout"
-                    onClick={handleLogout}
-                  >
-                    Log out
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              className="profile-trigger"
+              onClick={() => navigate('/host/profile')}
+              aria-label="View profile"
+            >
+              <div className="profile-avatar">
+                {userName.charAt(0).toUpperCase()}
+              </div>
+            </button>
 
             {/* Hamburger Menu */}
             <button

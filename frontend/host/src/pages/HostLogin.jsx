@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { useNavigate, Link } from 'react-router-dom'
 import { auth, RecaptchaVerifier, signInWithPhoneNumber } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 
 export default function HostLogin() {
   const nav = useNavigate()
+  const { refreshAuth } = useAuth()
   const [view, setView] = useState('main') // 'main', 'email', 'signup', 'phone', 'verify'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [signupPhone, setSignupPhone] = useState('')
+  const [signupLocation, setSignupLocation] = useState('')
   const [countryCode, setCountryCode] = useState('+1')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
@@ -21,6 +25,7 @@ export default function HostLogin() {
     setError('')
     try {
       await api.post('/auth/login', { email, password })
+      await refreshAuth()
       nav('/')
     } catch (err) {
       setError(err?.response?.data?.error || 'Invalid email or password')
@@ -31,11 +36,28 @@ export default function HostLogin() {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/auth/signup', { email, password, name: name || 'Host' })
-      await api.post('/auth/login', { email, password })
+      const normalizedEmail = email.trim()
+      const payload = {
+        email: normalizedEmail,
+        password,
+        name: (name || 'Host').trim(),
+        phone: signupPhone.trim(),
+        location: signupLocation.trim()
+      }
+
+      await api.post('/auth/signup', payload)
+      await api.post('/auth/login', { email: normalizedEmail, password })
+      await refreshAuth()
       nav('/')
     } catch (err) {
-      setError(err?.response?.data?.error || 'Error creating account')
+      const errorCode = err?.response?.data?.error
+      if (errorCode === 'email_in_use') {
+        setError('That email is already registered. Try logging in instead.')
+      } else if (errorCode === 'phone_in_use') {
+        setError('That phone number is already connected to another account.')
+      } else {
+        setError(errorCode || 'Error creating account')
+      }
     }
   }
 
@@ -869,6 +891,38 @@ export default function HostLogin() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '14px 12px',
+                    border: 'none',
+                    borderBottom: '1px solid #ebebeb',
+                    fontSize: 16,
+                    color: '#222',
+                    outline: 'none'
+                  }}
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone number"
+                  value={signupPhone}
+                  onChange={(e) => setSignupPhone(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '14px 12px',
+                    border: 'none',
+                    borderBottom: '1px solid #ebebeb',
+                    fontSize: 16,
+                    color: '#222',
+                    outline: 'none'
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Location"
+                  value={signupLocation}
+                  onChange={(e) => setSignupLocation(e.target.value)}
                   required
                   style={{
                     width: '100%',
