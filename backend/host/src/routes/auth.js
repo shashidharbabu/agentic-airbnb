@@ -5,6 +5,7 @@ const { pool } = require('../db');
 const passport = require('../middleware/passport');
 const admin = require('../middleware/firebase');
 const { ensureAuth } = require('../middleware/auth');
+const { uploadProfilePicture } = require('../middleware/upload');
 
 const router = express.Router();
 const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'airbnb_host.sid';
@@ -121,9 +122,40 @@ router.post('/logout', (req, res) => {
   });
 });
 
-router.get('/me', ensureAuth, (req, res) => {
-  const owner = req.session.owner || req.user || null;
-  return res.json({ owner });
+router.get('/me', ensureAuth, async (req, res) => {
+  try {
+    const ownerId = req.session.owner?.id;
+    if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
+
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        'SELECT id, email, name, phone, location, about, avatar_url FROM owners WHERE id = ?',
+        [ownerId]
+      );
+      
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'owner_not_found' });
+      }
+
+      const owner = {
+        id: rows[0].id,
+        email: rows[0].email,
+        name: rows[0].name,
+        phone: rows[0].phone,
+        location: rows[0].location,
+        bio: rows[0].about || '',
+        avatar_url: rows[0].avatar_url || null
+      };
+
+      return res.json({ owner });
+    } finally {
+      conn.release();
+    }
+  } catch (e) {
+    console.error('Get /me error:', e);
+    return res.status(500).json({ error: 'internal_error' });
+  }
 });
 
 router.put('/profile', ensureAuth, async (req, res) => {
@@ -154,12 +186,20 @@ router.put('/profile', ensureAuth, async (req, res) => {
         { name, phone, location, bio, id: ownerId }
       );
 
+      // Fetch updated owner with avatar_url
+      const [updatedRows] = await conn.execute(
+        'SELECT id, email, name, phone, location, about, avatar_url FROM owners WHERE id = ?',
+        [ownerId]
+      );
+
       const updatedOwner = {
-        ...req.session.owner,
+        id: updatedRows[0].id,
+        email: updatedRows[0].email,
         name,
         phone,
         location,
-        bio
+        bio,
+        avatar_url: updatedRows[0].avatar_url || null
       };
 
       req.session.owner = updatedOwner;
@@ -169,6 +209,71 @@ router.put('/profile', ensureAuth, async (req, res) => {
     }
   } catch (e) {
     console.error(e);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// Upload profile picture
+router.post('/profile/picture', ensureAuth, uploadProfilePicture.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const ownerId = req.session.owner?.id;
+    if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
+
+    const avatarUrl = `/uploads/profile-pictures/${req.file.filename}`;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        'UPDATE owners SET avatar_url = ? WHERE id = ?',
+        [avatarUrl, ownerId]
+      );
+
+      // Update session
+      if (req.session.owner) {
+        req.session.owner.avatar_url = avatarUrl;
+      }
+
+      return res.json({ 
+        message: 'Profile picture uploaded successfully',
+        avatar_url: avatarUrl
+      });
+    } finally {
+      conn.release();
+    }
+  } catch (e) {
+    console.error('Upload profile picture error:', e);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// Delete profile picture
+router.delete('/profile/picture', ensureAuth, async (req, res) => {
+  try {
+    const ownerId = req.session.owner?.id;
+    if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        'UPDATE owners SET avatar_url = NULL WHERE id = ?',
+        [ownerId]
+      );
+
+      // Update session
+      if (req.session.owner) {
+        req.session.owner.avatar_url = null;
+      }
+
+      return res.json({ message: 'Profile picture deleted successfully' });
+    } finally {
+      conn.release();
+    }
+  } catch (e) {
+    console.error('Delete profile picture error:', e);
     return res.status(500).json({ error: 'internal_error' });
   }
 });

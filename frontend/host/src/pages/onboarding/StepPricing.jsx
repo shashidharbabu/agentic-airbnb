@@ -21,7 +21,7 @@ export default function StepPricing(){
     }
     await api.put(`/properties/${id}`, { price_per_night: numericPrice })
     if (error) setError('')
-    nav(`/onboarding/${id}/discounts`)
+    nav(`/onboarding/${id}/booking`)
   }
 
   const footer = (

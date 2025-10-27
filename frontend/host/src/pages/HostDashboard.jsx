@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
-import AgentPanel from '../components/AgentPanel'
 import '../styles/Listings.css'
 import { currencyFormatter, transformProperty as transformListingProperty } from '../utils/listings'
 
@@ -81,6 +80,10 @@ export default function HostDashboard() {
     return listings.reduce((sum, listing) => sum + (listing.price || 0), 0)
   }, [listings])
 
+  const liveListings = useMemo(() => {
+    return listings.filter(l => l.statusKey === 'live')
+  }, [listings])
+
   if (loading) {
     return (
       <div style={{ 
@@ -107,119 +110,273 @@ export default function HostDashboard() {
 
   return (
     <div style={{ 
-      maxWidth: 1200, 
-      margin: '32px auto', 
-      padding: '0 24px', 
-      fontFamily: 'system-ui, sans-serif',
+      maxWidth: 1400, 
+      margin: '0 auto', 
+      padding: '32px 40px 64px', 
+      fontFamily: '"Airbnb Cereal VF", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
+      background: '#f7f7f7',
       minHeight: 'calc(100vh - 200px)'
     }}>
       {/* Header Section */}
       <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        marginBottom: 32,
-        paddingBottom: 20,
-        borderBottom: '1px solid #f0f0f0'
+        marginBottom: 40
       }}>
-        <div>
-          <h1 style={{ 
-            fontSize: 32, 
-            fontWeight: 700, 
-            margin: '0 0 8px 0',
-            color: '#222'
-          }}>
-            Welcome back, {owner?.name}!
-          </h1>
-          <p style={{ 
-            color: '#6b7280', 
-            margin: 0,
-            fontSize: 16
-          }}>
-            Manage your properties and bookings
-          </p>
-        </div>
+        <h1 style={{ 
+          fontSize: 36, 
+          fontWeight: 600, 
+          margin: '0 0 8px 0',
+          color: '#222',
+          letterSpacing: '-0.5px'
+        }}>
+          Welcome back, {owner?.name}!
+        </h1>
+        <p style={{ 
+          color: '#717171', 
+          margin: 0,
+          fontSize: 16
+        }}>
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Key Metrics Cards */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-        gap: 20, 
-        marginBottom: 32 
+        gridTemplateColumns: 'repeat(4, 1fr)', 
+        gap: 24, 
+        marginBottom: 40 
       }}>
         <div style={{ 
-          background: '#fff', 
-          padding: 24, 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+          padding: 28, 
           borderRadius: 16, 
-          border: '1px solid #f0f0f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+          position: 'relative',
+          overflow: 'hidden'
         }}>
-          <div style={{ fontSize: 32, fontWeight: 700, color: '#FF385C', marginBottom: 8 }}>
-            {listings.length}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+              Total Properties
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+              {listings.length}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
+              {liveListings.length} live
+            </div>
           </div>
-          <div style={{ color: '#6b7280', fontSize: 14, fontWeight: 500 }}>
-            Total Properties
-          </div>
+          <div style={{ 
+            position: 'absolute', 
+            right: -20, 
+            bottom: -20, 
+            fontSize: 100, 
+            opacity: 0.15 
+          }}>🏠</div>
         </div>
+
         <div style={{ 
-          background: '#fff', 
-          padding: 24, 
+          background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+          padding: 28, 
           borderRadius: 16, 
-          border: '1px solid #f0f0f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          boxShadow: '0 4px 12px rgba(240, 147, 251, 0.4)',
+          position: 'relative',
+          overflow: 'hidden'
         }}>
-          <div style={{ fontSize: 32, fontWeight: 700, color: '#FF385C', marginBottom: 8 }}>
-            {pending.length}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+              Pending Requests
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+              {pending.length}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
+              {pending.length > 0 ? 'Needs attention' : 'All clear'}
+            </div>
           </div>
-          <div style={{ color: '#6b7280', fontSize: 14, fontWeight: 500 }}>
-            Pending Bookings
-          </div>
+          <div style={{ 
+            position: 'absolute', 
+            right: -20, 
+            bottom: -20, 
+            fontSize: 100, 
+            opacity: 0.15 
+          }}>📅</div>
         </div>
+
         <div style={{ 
-          background: '#fff', 
-          padding: 24, 
+          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
+          padding: 28, 
           borderRadius: 16, 
-          border: '1px solid #f0f0f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          boxShadow: '0 4px 12px rgba(79, 172, 254, 0.4)',
+          position: 'relative',
+          overflow: 'hidden'
         }}>
-          <div style={{ fontSize: 32, fontWeight: 700, color: '#FF385C', marginBottom: 8 }}>
-            {currencyFormatter.format(totalNightlyRate)}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+              Total Nightly Rate
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+              {currencyFormatter.format(totalNightlyRate)}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
+              Across all properties
+            </div>
           </div>
-          <div style={{ color: '#6b7280', fontSize: 14, fontWeight: 500 }}>
-            Total Nightly Rate
+          <div style={{ 
+            position: 'absolute', 
+            right: -20, 
+            bottom: -20, 
+            fontSize: 100, 
+            opacity: 0.15 
+          }}>💰</div>
+        </div>
+
+        <div style={{ 
+          background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', 
+          padding: 28, 
+          borderRadius: 16, 
+          boxShadow: '0 4px 12px rgba(250, 112, 154, 0.4)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+              Avg. Price/Night
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+              {listings.length > 0 ? currencyFormatter.format(totalNightlyRate / listings.length) : '$0'}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
+              Per property
+            </div>
           </div>
+          <div style={{ 
+            position: 'absolute', 
+            right: -20, 
+            bottom: -20, 
+            fontSize: 100, 
+            opacity: 0.15 
+          }}>📊</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 32 }}>
-        {/* Properties Section */}
-        <section>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            marginBottom: 20 
+      {/* Main Content Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
+        {/* Left Column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+          {/* Quick Actions */}
+          <section style={{ 
+            background: '#fff', 
+            padding: 28, 
+            borderRadius: 16,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
           }}>
-            <h2 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: '#222' }}>
-              My Properties
+            <h2 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 20px 0', color: '#222' }}>
+              Quick Actions
             </h2>
-            <span style={{ 
-              color: '#6b7280', 
-              fontSize: 14,
-              background: '#f7f7f7',
-              padding: '4px 12px',
-              borderRadius: 20
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              <button 
+                onClick={() => nav('/onboarding/type')}
+                style={{ 
+                  background: '#FF385C', 
+                  color: '#fff', 
+                  border: 'none', 
+                  padding: '16px 20px', 
+                  borderRadius: 12, 
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8
+                }}
+              >
+                <span style={{ fontSize: 20 }}>➕</span>
+                Add Property
+              </button>
+              <button 
+                onClick={() => nav('/host/listings')}
+                style={{ 
+                  background: '#fff', 
+                  color: '#222',
+                  border: '1px solid #ddd', 
+                  padding: '16px 20px', 
+                  borderRadius: 12, 
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8
+                }}
+              >
+                <span style={{ fontSize: 20 }}>📋</span>
+                View All Listings
+              </button>
+              <button 
+                onClick={() => nav('/host/bookings')}
+                style={{ 
+                  background: '#fff', 
+                  color: '#222',
+                  border: '1px solid #ddd', 
+                  padding: '16px 20px', 
+                  borderRadius: 12, 
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8
+                }}
+              >
+                <span style={{ fontSize: 20 }}>📅</span>
+                Manage Bookings
+              </button>
+            </div>
+          </section>
+
+          {/* Recent Properties */}
+          <section style={{ 
+            background: '#fff', 
+            padding: 28, 
+            borderRadius: 16,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              marginBottom: 24 
             }}>
-              {listings.length} {listings.length === 1 ? 'property' : 'properties'}
-            </span>
-          </div>
+              <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: '#222' }}>
+                Recent Properties
+              </h2>
+              <button 
+                onClick={() => nav('/host/listings')}
+                style={{ 
+                  color: '#FF385C', 
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textDecoration: 'underline'
+                }}
+              >
+                View all →
+              </button>
+            </div>
           
           {listings.length === 0 ? (
             <div style={{ 
               border: '2px dashed #e5e7eb', 
               padding: 48, 
-              borderRadius: 16, 
+              borderRadius: 12, 
               textAlign: 'center',
               background: '#fafafa'
             }}>
@@ -227,282 +384,266 @@ export default function HostDashboard() {
               <h3 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 8px 0', color: '#374151' }}>
                 No properties yet
               </h3>
-              <p style={{ color: '#6b7280', margin: '0 0 24px 0' }}>
+              <p style={{ color: '#6b7280', margin: '0 0 24px 0', fontSize: 14 }}>
                 Get started by adding your first property
               </p>
-              <Link 
-                to="/onboarding/type" 
-                style={{ 
-                  background: '#FF385C', 
-                  color: '#fff', 
-                  padding: '12px 24px', 
-                  borderRadius: 12, 
-                  fontWeight: 600, 
-                  textDecoration: 'none',
-                  display: 'inline-block'
-                }}
-              >
-                Add your first property
-              </Link>
             </div>
           ) : (
-            <div className="listings-page__grid">
-              {listings.map((listing) => {
-                const ratingLabel = listing.rating !== null && listing.rating !== undefined ? listing.rating.toFixed(2) : '—'
-                const reviewsLabel = typeof listing.reviews === 'number' ? listing.reviews.toLocaleString('en-US') : '—'
-                const viewsLabel = typeof listing.views === 'number' ? listing.views.toLocaleString('en-US') : '—'
-                const priceLabel =
-                  listing.price !== null && listing.price !== undefined
-                    ? currencyFormatter.format(listing.price)
-                    : '—'
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {listings.slice(0, 5).map((listing) => {
+                const priceLabel = listing.price !== null && listing.price !== undefined
+                  ? currencyFormatter.format(listing.price)
+                  : '—'
 
                 return (
-                  <article key={listing.id} className="listing-card">
-                    <div className="listing-card__media" style={{ backgroundImage: `url(${listing.image})` }}>
-                      <div className="listing-card__pill listing-card__pill--status">
-                        <span aria-hidden="true">
-                          <svg viewBox="0 0 24 24">
-                            <path d="m5.25 12 4.5 4.5 9-9" />
-                          </svg>
+                  <div 
+                    key={listing.id} 
+                    style={{ 
+                      display: 'flex',
+                      gap: 16,
+                      padding: 16,
+                      background: '#fafafa',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      border: '1px solid #f0f0f0'
+                    }}
+                    onClick={() => nav(`/host/listings/${listing.id}/details`)}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#f0f0f0'
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#fafafa'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                    }}
+                  >
+                    <div style={{
+                      width: 100,
+                      height: 80,
+                      borderRadius: 8,
+                      backgroundImage: `url(${listing.image})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      flexShrink: 0
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ 
+                        fontSize: 16, 
+                        fontWeight: 600, 
+                        color: '#222', 
+                        marginBottom: 4,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {listing.title}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#717171', marginBottom: 8 }}>
+                        {listing.location}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ 
+                          fontSize: 12, 
+                          padding: '4px 8px', 
+                          borderRadius: 6, 
+                          background: listing.statusKey === 'live' ? '#d4edda' : '#f8d7da',
+                          color: listing.statusKey === 'live' ? '#155724' : '#721c24',
+                          fontWeight: 600
+                        }}>
+                          {listing.status}
                         </span>
-                        {listing.status}
-                      </div>
-                      <button
-                        className="listing-card__pill listing-card__pill--light"
-                        type="button"
-                        onClick={() => nav(`/listing/${listing.id}`)}
-                      >
-                        Preview
-                      </button>
-                    </div>
-
-                    <div className="listing-card__body">
-                      <div className="listing-card__header">
-                        <div>
-                          <h2>{listing.title}</h2>
-                          <span>{listing.location}</span>
-                        </div>
-                        <button className="icon-button" aria-label="Open quick actions" type="button">
-                          <svg viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="1.5" />
-                            <circle cx="12" cy="6" r="1.5" />
-                            <circle cx="12" cy="18" r="1.5" />
-                          </svg>
-                        </button>
-                      </div>
-
-                      <div className="listing-card__metrics">
-                        <div className="metric">
-                          <span className="metric__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24">
-                              <path d="M12 2.25 14.7 8.4l6.3.45-4.8 4.05 1.5 6.15L12 15.9 6.3 19.05l1.5-6.15-4.8-4.05 6.3-.45Z" />
-                            </svg>
-                          </span>
-                          <div>
-                            <strong>{ratingLabel}</strong>
-                            <span>Guest rating</span>
-                          </div>
-                        </div>
-                        <div className="metric">
-                          <span className="metric__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24">
-                              <path d="M7.5 21.75h9" />
-                              <path d="M5.25 7.5h13.5" />
-                              <path d="M6.75 7.5v-3h10.5v3" />
-                              <path d="M9 7.5v14.25" />
-                              <path d="M15 7.5v14.25" />
-                            </svg>
-                          </span>
-                          <div>
-                            <strong>{reviewsLabel}</strong>
-                            <span>Total reviews</span>
-                          </div>
-                        </div>
-                        <div className="metric">
-                          <span className="metric__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24">
-                              <path d="M3.75 12c0-4.556 3.694-8.25 8.25-8.25S20.25 7.444 20.25 12 16.556 20.25 12 20.25 3.75 16.556 3.75 12Z" />
-                              <path d="m9.75 10.5 2.25 2.25 5.25-5.25" />
-                            </svg>
-                          </span>
-                          <div>
-                            <strong>{viewsLabel}</strong>
-                            <span>Views (90 days)</span>
-                          </div>
-                        </div>
-                        <div className="metric">
-                          <span className="metric__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24">
-                              <path d="M3.75 7.5h16.5" />
-                              <path d="M7.5 7.5v-3h9v3" />
-                              <path d="M6.75 7.5v12.75" />
-                              <path d="M17.25 7.5v12.75" />
-                              <path d="M6.75 15.75h10.5" />
-                            </svg>
-                          </span>
-                          <div>
-                            <strong>{priceLabel}</strong>
-                            <span>Average nightly price</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="listing-card__footer">
-                        <button className="outline-button" type="button" onClick={() => nav(`/host/listings/${listing.id}/details`)}>
-                          Listing details
-                        </button>
-                        <button className="outline-button" type="button" onClick={() => nav(`/host/listings/${listing.id}/pricing`)}>
-                          Pricing &amp; availability
-                        </button>
-                        <button className="outline-button" type="button" onClick={() => nav(`/host/listings/${listing.id}/reservations`)}>
-                          Reservations
-                        </button>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#FF385C' }}>
+                          {priceLabel}/night
+                        </span>
                       </div>
                     </div>
-                  </article>
+                  </div>
                 )
               })}
             </div>
           )}
-        </section>
+          </section>
+        </div>
 
-        {/* Sidebar */}
-        <aside>
-          <h2 style={{ fontSize: 24, fontWeight: 600, margin: '0 0 20px 0', color: '#222' }}>
-            Pending Bookings
-          </h2>
-          <div style={{ display: 'grid', gap: 16 }}>
-            {pending.length === 0 ? (
-              <div style={{ 
-                border: '1px solid #e5e7eb', 
-                borderRadius: 16, 
-                padding: 32, 
-                textAlign: 'center',
-                background: '#fafafa'
-              }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>📅</div>
-                <p style={{ color: '#6b7280', margin: 0, fontSize: 14 }}>
-                  No pending requests
-                </p>
-              </div>
-            ) : (
-              pending.map((booking) => {
-                const travelerName = booking.traveler?.name || 'Guest'
-                const travelerEmail = booking.traveler?.email || ''
-                const guests = typeof booking.guests === 'number' ? booking.guests : null
-                const propertyName = booking.property?.name || 'Untitled listing'
-                const propertyLocation = booking.property?.location || ''
-                const stayRange = formatRange(booking.startDate, booking.endDate)
-                const initial = getTravelerInitial(travelerName, travelerEmail)
-
-                return (
-                <div key={booking.id} style={{ 
-                  border: '1px solid #e5e7eb', 
-                  borderRadius: 16, 
-                  padding: 20, 
-                  background: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        {/* Right Column - Pending Bookings */}
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Pending Bookings Section */}
+          <section style={{ 
+            background: '#fff', 
+            padding: 24, 
+            borderRadius: 16,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              marginBottom: 20 
+            }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#222' }}>
+                Pending Requests
+              </h2>
+              {pending.length > 0 && (
+                <span style={{ 
+                  background: '#FF385C',
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: '4px 10px',
+                  borderRadius: 12
                 }}>
-                  <div style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    marginBottom: 12
-                  }}>
-                    <div style={{ 
-                      width: 40,
-                      height: 40,
-                      borderRadius: '50%',
-                      background: '#FF385C',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontWeight: 600,
-                      fontSize: 16
-                    }}>
-                      {initial}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 16, color: '#222' }}>
-                        {travelerName}
-                      </div>
-                      {travelerEmail ? (
-                        <div style={{ color: '#6b7280', fontSize: 12 }}>
-                          {travelerEmail}
-                        </div>
-                      ) : null}
-                      <div style={{ color: '#6b7280', fontSize: 12 }}>
-                        {guests !== null ? `${guests} ${guests === 1 ? 'guest' : 'guests'}` : 'Guest count TBD'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: 12, color: '#4b5563', fontSize: 13 }}>
-                    <strong style={{ display: 'block', color: '#1f2937', fontSize: 14 }}>{propertyName}</strong>
-                    {propertyLocation ? <span>{propertyLocation}</span> : null}
-                  </div>
-                  
-                  <div style={{ 
-                    color: '#6b7280', 
-                    fontSize: 14, 
-                    marginBottom: 16,
-                    padding: 12,
-                    background: '#f7f7f7',
-                    borderRadius: 8
-                  }}>
-                    📅 {stayRange}
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button 
-                      onClick={() => handleBookingAction(booking.id, 'accept')}
-                      style={{ 
-                        flex: 1,
-                        background: '#FF385C', 
-                        color: '#fff', 
-                        border: 'none', 
-                        padding: '10px 16px', 
-                        borderRadius: 8, 
-                        fontWeight: 600,
-                        fontSize: 14,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseOver={(e) => e.target.style.background = '#E31C5F'}
-                      onMouseOut={(e) => e.target.style.background = '#FF385C'}
-                    >
-                      Accept
-                    </button>
-                    <button 
-                      onClick={() => handleBookingAction(booking.id, 'cancel')}
-                      style={{ 
-                        flex: 1,
-                        border: '1px solid #d1d5db', 
-                        padding: '10px 16px', 
-                        borderRadius: 8, 
-                        background: '#fff',
-                        color: '#374151',
-                        fontWeight: 500,
-                        fontSize: 14,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseOver={(e) => e.target.style.borderColor = '#9ca3af'}
-                      onMouseOut={(e) => e.target.style.borderColor = '#d1d5db'}
-                    >
-                      Decline
-                    </button>
-                  </div>
+                  {pending.length}
+                </span>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {pending.length === 0 ? (
+                <div style={{ 
+                  border: '2px dashed #e5e7eb', 
+                  borderRadius: 12, 
+                  padding: 32, 
+                  textAlign: 'center',
+                  background: '#fafafa'
+                }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
+                  <p style={{ color: '#6b7280', margin: 0, fontSize: 13 }}>
+                    All caught up!
+                  </p>
+                  <p style={{ color: '#6b7280', margin: '4px 0 0 0', fontSize: 12 }}>
+                    No pending requests
+                  </p>
                 </div>
-                )
-              })
-            )}
-          </div>
-          
-          <div style={{ marginTop: 32 }}>
-            <AgentPanel />
-          </div>
+              ) : (
+                pending.map((booking) => {
+                  const travelerName = booking.traveler?.name || 'Guest'
+                  const travelerEmail = booking.traveler?.email || ''
+                  const guests = typeof booking.guests === 'number' ? booking.guests : null
+                  const propertyName = booking.property?.name || 'Untitled listing'
+                  const stayRange = formatRange(booking.startDate, booking.endDate)
+                  const initial = getTravelerInitial(travelerName, travelerEmail)
+
+                  return (
+                    <div key={booking.id} style={{ 
+                      border: '1px solid #ebebeb', 
+                      borderRadius: 12, 
+                      padding: 16, 
+                      background: '#fafafa',
+                      transition: 'all 0.2s'
+                    }}>
+                      <div style={{ 
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        marginBottom: 12,
+                        paddingBottom: 12,
+                        borderBottom: '1px solid #ebebeb'
+                      }}>
+                        <div style={{ 
+                          width: 36,
+                          height: 36,
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          fontWeight: 600,
+                          fontSize: 14
+                        }}>
+                          {initial}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ 
+                            fontWeight: 600, 
+                            fontSize: 14, 
+                            color: '#222',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {travelerName}
+                          </div>
+                          <div style={{ color: '#717171', fontSize: 11 }}>
+                            {guests !== null ? `${guests} ${guests === 1 ? 'guest' : 'guests'}` : 'TBD guests'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ 
+                          fontWeight: 600, 
+                          color: '#222', 
+                          fontSize: 13, 
+                          marginBottom: 4,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {propertyName}
+                        </div>
+                        <div style={{ 
+                          color: '#717171', 
+                          fontSize: 12, 
+                          marginBottom: 8
+                        }}>
+                          📅 {stayRange}
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button 
+                          onClick={() => handleBookingAction(booking.id, 'accept')}
+                          style={{ 
+                            flex: 1,
+                            background: '#00a699', 
+                            color: '#fff', 
+                            border: 'none', 
+                            padding: '8px 12px', 
+                            borderRadius: 8, 
+                            fontWeight: 600,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={(e) => e.target.style.background = '#008c80'}
+                          onMouseOut={(e) => e.target.style.background = '#00a699'}
+                        >
+                          ✓ Accept
+                        </button>
+                        <button 
+                          onClick={() => handleBookingAction(booking.id, 'cancel')}
+                          style={{ 
+                            flex: 1,
+                            border: '1px solid #ddd', 
+                            padding: '8px 12px', 
+                            borderRadius: 8, 
+                            background: '#fff',
+                            color: '#717171',
+                            fontWeight: 600,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={(e) => {
+                            e.target.style.borderColor = '#aaa'
+                            e.target.style.color = '#222'
+                          }}
+                          onMouseOut={(e) => {
+                            e.target.style.borderColor = '#ddd'
+                            e.target.style.color = '#717171'
+                          }}
+                        >
+                          ✕ Decline
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </section>
         </aside>
       </div>
 

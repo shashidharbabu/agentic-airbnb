@@ -117,15 +117,63 @@ const AIAgentPanel = ({ isOpen, onClose, bookingId }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/ai-agent/chat', {
+      // First, try to get booking details if bookingId exists
+      let bookingContext = null;
+      let preferences = {
+        budget_tier: 'mid-range',
+        interests: ['food', 'culture', 'sightseeing'],
+        mobility_needs: [],
+        dietary_restrictions: []
+      };
+
+      if (bookingId && user?.id) {
+        try {
+          const bookingResponse = await fetch(`http://localhost:5001/api/bookings/${bookingId}`, {
+            credentials: 'include'
+          });
+          if (bookingResponse.ok) {
+            const bookingData = await bookingResponse.json();
+            const booking = bookingData.booking;
+            
+            // Extract location from property
+            const location = booking.property?.city && booking.property?.state
+              ? `${booking.property.city}, ${booking.property.state}`
+              : booking.property?.city || 'San Francisco, CA';
+            
+            bookingContext = {
+              check_in_date: booking.start_date?.slice(0, 10),
+              check_out_date: booking.end_date?.slice(0, 10),
+              location: location,
+              party_type: booking.guests > 2 ? 'group' : 'couple',
+              party_size: booking.guests || 2
+            };
+          }
+        } catch (err) {
+          console.log('Could not fetch booking details, using general context', err);
+        }
+      }
+
+      // If no booking context, try to extract from user message
+      if (!bookingContext) {
+        bookingContext = {
+          check_in_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          check_out_date: new Date(Date.now() + 11 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          location: 'San Francisco, CA',
+          party_type: 'couple',
+          party_size: 2
+        };
+      }
+
+      // Call the full concierge endpoint with complete context
+      const response = await fetch('http://localhost:8000/api/concierge', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: inputMessage,
-          booking_id: bookingId,
-          traveler_id: user?.id
+          booking_context: bookingContext,
+          preferences: preferences,
+          user_message: inputMessage
         })
       });
 
@@ -135,10 +183,81 @@ const AIAgentPanel = ({ isOpen, onClose, bookingId }) => {
 
       const data = await response.json();
       
+      // Format the response to include all the rich data
+      let formattedResponse = '';
+      
+      // Add AI notes if available
+      if (data.agent_notes) {
+        formattedResponse += `## 📝 Travel Recommendations\n\n${data.agent_notes}\n\n`;
+      }
+
+      // Add day-by-day plan if available
+      if (data.day_by_day_plan && data.day_by_day_plan.length > 0) {
+        formattedResponse += `## 📅 Day-by-Day Itinerary\n\n`;
+        data.day_by_day_plan.forEach((day, idx) => {
+          const dayDate = new Date(day.date);
+          const dateStr = dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          formattedResponse += `### Day ${idx + 1} - ${dateStr}\n\n`;
+          
+          if (day.morning) {
+            formattedResponse += `**🌅 Morning:** ${day.morning.title}\n`;
+            if (day.morning.description) {
+              formattedResponse += `${day.morning.description}\n`;
+            }
+            formattedResponse += `\n`;
+          }
+          
+          if (day.afternoon) {
+            formattedResponse += `**☀️ Afternoon:** ${day.afternoon.title}\n`;
+            if (day.afternoon.description) {
+              formattedResponse += `${day.afternoon.description}\n`;
+            }
+            formattedResponse += `\n`;
+          }
+          
+          if (day.evening) {
+            formattedResponse += `**🌙 Evening:** ${day.evening.title}\n`;
+            if (day.evening.description) {
+              formattedResponse += `${day.evening.description}\n`;
+            }
+            formattedResponse += `\n`;
+          }
+        });
+      }
+
+      // Add packing checklist if available
+      if (data.packing_checklist && data.packing_checklist.length > 0) {
+        formattedResponse += `## 🎒 Packing Checklist\n\n`;
+        const essentials = data.packing_checklist.filter(item => item.is_essential);
+        const others = data.packing_checklist.filter(item => !item.is_essential);
+        
+        if (essentials.length > 0) {
+          formattedResponse += `**Essential Items:**\n`;
+          essentials.forEach(item => {
+            formattedResponse += `- ⭐ ${item.item_name}\n`;
+          });
+          formattedResponse += `\n`;
+        }
+        
+        if (others.length > 0) {
+          formattedResponse += `**Additional Items:**\n`;
+          others.forEach(item => {
+            const emoji = item.weather_dependent ? '🌡️' : '📦';
+            formattedResponse += `- ${emoji} ${item.item_name}\n`;
+          });
+          formattedResponse += `\n`;
+        }
+      }
+
+      // Add weather info if available
+      if (data.weather_summary) {
+        formattedResponse += `## 🌤️ Weather Information\n\nLocation: ${data.weather_summary.location}\n\n`;
+      }
+
       const assistantMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: data.response,
+        content: formattedResponse || data.response || 'I can help you plan your trip! Please provide more details about your travel preferences.',
         timestamp: new Date()
       };
 
@@ -154,7 +273,7 @@ const AIAgentPanel = ({ isOpen, onClose, bookingId }) => {
       const errorMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: 'Sorry, I encountered an error while processing your request. Please make sure the AI agent server is running on port 8000 and try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);

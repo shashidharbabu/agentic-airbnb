@@ -21,7 +21,7 @@ export default function StepBooking(){
 
   const footer = (
     <>
-      <button onClick={()=>nav(`/onboarding/${id}/discounts`)} style={{ border:'1px solid #ddd', padding:'14px 20px', borderRadius:12, background:'#fff', fontWeight:600 }}>Back</button>
+      <button onClick={()=>nav(`/onboarding/${id}/pricing`)} style={{ border:'1px solid #ddd', padding:'14px 20px', borderRadius:12, background:'#fff', fontWeight:600 }}>Back</button>
       <button onClick={finish} style={{ background:'#222', color:'#fff', border:'none', padding:'14px 20px', borderRadius:12, fontWeight:600 }}>Finish</button>
     </>
   )

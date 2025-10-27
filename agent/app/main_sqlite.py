@@ -122,6 +122,80 @@ async def ai_concierge(request: ConciergeRequest, db: Session = Depends(get_db))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing concierge request: {str(e)}")
 
+# AI Agent Chat endpoint (for frontend integration)
+@app.post("/api/ai-agent/chat")
+async def ai_agent_chat(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Chat endpoint for AI Agent integration with frontend.
+    Processes chat messages with booking context.
+    """
+    try:
+        message = request.get("message", "")
+        booking_id = request.get("booking_id")
+        traveler_id = request.get("traveler_id")
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        # If booking_id is provided, get booking context
+        booking_context = None
+        user_preferences = None
+        
+        if booking_id:
+            booking = db.query(Booking).filter(Booking.id == booking_id).first()
+            if booking:
+                preferences = db.query(UserPreferences).filter(UserPreferences.booking_id == booking_id).first()
+                
+                from app.schemas import BookingContext, UserPreferences as UserPreferencesSchema
+                booking_context = BookingContext(
+                    check_in_date=booking.check_in_date,
+                    check_out_date=booking.check_out_date,
+                    location=booking.location,
+                    latitude=float(booking.latitude) if booking.latitude else None,
+                    longitude=float(booking.longitude) if booking.longitude else None,
+                    party_type=booking.party_type,
+                    party_size=booking.party_size
+                )
+                
+                if preferences:
+                    user_preferences = UserPreferencesSchema(
+                        budget_tier=preferences.budget_tier,
+                        interests=preferences.interests or [],
+                        mobility_needs=preferences.mobility_needs or [],
+                        dietary_restrictions=preferences.dietary_restrictions or [],
+                        special_requirements=preferences.special_requirements
+                    )
+        
+        # Create concierge request
+        if booking_context and user_preferences:
+            concierge_request = ConciergeRequest(
+                booking_context=booking_context,
+                preferences=user_preferences,
+                user_message=message
+            )
+            agent_response = await simple_travel_agent.process_concierge_request(concierge_request)
+            response_text = agent_response.get("agent_response", "I can help you plan your trip! Please provide more details about your travel preferences.")
+        else:
+            # No booking context, provide general response
+            response_text = f"I'm your AI travel assistant! To provide personalized recommendations, I'll need information about your booking. How can I help you today?"
+        
+        return {
+            "response": response_text,
+            "booking_id": booking_id,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        print(f"Error in ai_agent_chat: {str(e)}")
+        return {
+            "response": "I apologize, but I encountered an error processing your request. Please try again or provide more details about your travel plans.",
+            "status": "error",
+            "error": str(e)
+        }
+
 # Natural Language Query endpoint
 @app.post("/api/concierge/query")
 async def natural_language_query(

@@ -22,7 +22,7 @@ router.post('/', ensureAuth, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [propertyRows] = await conn.execute(
-        'SELECT id, name FROM properties WHERE id = ? AND active = 1',
+        'SELECT id, name FROM properties WHERE id = ?',
         [property_id]
       );
 
@@ -111,7 +111,7 @@ router.get('/traveler/:id', ensureAuth, async (req, res) => {
       );
       const total = countResult[0].total;
 
-      const [favorites] = await conn.execute(`
+      const [favorites] = await conn.query(`
         SELECT 
           f.id as favorite_id,
           f.created_at as favorited_at,
@@ -119,21 +119,35 @@ router.get('/traveler/:id', ensureAuth, async (req, res) => {
           p.name as property_name,
           p.description,
           p.location,
-          p.price as price_per_night,
+          p.price_per_night,
           p.bedrooms,
           p.bathrooms,
           p.max_guests,
-          p.type as property_type,
-          p.amenities_json as amenities,
-          u.name as owner_name,
-          JSON_EXTRACT(p.images_json, '$[0]') as main_photo
+          p.property_type,
+          p.amenities,
+          o.name as owner_name
         FROM favorites f
         LEFT JOIN properties p ON f.property_id = p.id
-        LEFT JOIN users u ON p.owner_id = u.id AND u.role = 'HOST'
+        LEFT JOIN owners o ON p.owner_id = o.id
         WHERE f.traveler_id = ?
         ORDER BY f.created_at DESC
         LIMIT ? OFFSET ?
       `, [travelerId, parseInt(limit), offset]);
+
+      // Fetch the main photo for each favorite
+      for (const favorite of favorites) {
+        if (favorite.property_id) {
+          const [photos] = await conn.query(
+            `SELECT file_path FROM property_photos 
+             WHERE property_id = ? 
+             ORDER BY id ASC
+             LIMIT 1`,
+            [favorite.property_id]
+          );
+          
+          favorite.main_photo = photos.length > 0 ? photos[0].file_path : null;
+        }
+      }
 
       const processedFavorites = favorites.map(favorite => {
         if (favorite.amenities) {

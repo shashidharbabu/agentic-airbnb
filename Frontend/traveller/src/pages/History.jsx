@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { mockProperties } from '../data/mockProperties';
+import { bookingsAPI } from '../services/api';
 
 const History = () => {
   const navigate = useNavigate();
@@ -23,23 +23,28 @@ const History = () => {
   const loadHistory = async () => {
     try {
       setLoading(true);
-      const storedBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+      // Load bookings from the database API only - NO mock data
+      const response = await bookingsAPI.getTravelerBookings(traveler.id);
+      const bookings = response.data.bookings || [];
       
-      const enrichedBookings = storedBookings.map(booking => {
-        const property = mockProperties.find(p => p.id === booking.property_id);
-        return {
-          ...booking,
-          property_name: property?.name || 'Unknown Property',
-          property_location: property?.location || 'Unknown Location',
-          property_image: property?.image || '',
-          property_type: property?.type || 'Apartment',
-          bedrooms: property?.bedrooms || 2,
-          bathrooms: property?.bathrooms || 1,
-          max_guests: property?.max_guests || 4,
-          rating: property?.rating || 4.5,
-          amenities: property?.amenities || []
-        };
-      });
+      // Transform to match expected format
+      const enrichedBookings = bookings.map(booking => ({
+        id: booking.id,
+        property_id: booking.property_id,
+        property_name: booking.property_name || 'Unknown Property',
+        property_location: booking.property_location || 'Unknown Location',
+        property_image: booking.property_photo || '',
+        property_type: booking.property_type || 'Property',
+        bedrooms: booking.bedrooms || 0,
+        bathrooms: booking.bathrooms || 0,
+        max_guests: booking.max_guests || 0,
+        status: booking.status,
+        start_date: booking.start_date,
+        end_date: booking.end_date,
+        guests: booking.guests,
+        total_price: booking.total_price,
+        created_at: booking.created_at
+      }));
 
       enrichedBookings.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
@@ -47,6 +52,7 @@ const History = () => {
     } catch (err) {
       setError('Failed to load travel history');
       console.error('Error loading history:', err);
+      setHistory([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -172,7 +178,14 @@ const History = () => {
               {filteredHistory.map((booking) => (
                 <div key={booking.id} className="history-card">
                   <div className="property-image">
-                    <img src={booking.property_image} alt={booking.property_name} />
+                    <img 
+                      src={
+                        booking.property_image?.startsWith('http') 
+                          ? booking.property_image 
+                          : `http://localhost:4000${booking.property_image}`
+                      } 
+                      alt={booking.property_name} 
+                    />
                     <div className="status-badge" style={{ backgroundColor: getStatusColor(booking.status) }}>
                       {getStatusIcon(booking.status)} {booking.status}
                     </div>
@@ -212,12 +225,12 @@ const History = () => {
                       <div className="pricing">
                         <div className="price-breakdown">
                           <div className="price-item">
-                            <span>${booking.price_per_night} × {calculateNights(booking.start_date, booking.end_date)} nights</span>
-                            <span>${(booking.price_per_night * calculateNights(booking.start_date, booking.end_date)).toFixed(2)}</span>
+                            <span>${Number(booking.price_per_night).toFixed(2)} × {calculateNights(booking.start_date, booking.end_date)} nights</span>
+                            <span>${(Number(booking.price_per_night) * calculateNights(booking.start_date, booking.end_date)).toFixed(2)}</span>
                           </div>
                           <div className="price-item total">
                             <span>Total</span>
-                            <span>${booking.total_price?.toFixed(2) || (booking.price_per_night * calculateNights(booking.start_date, booking.end_date)).toFixed(2)}</span>
+                            <span>${booking.total_price ? Number(booking.total_price).toFixed(2) : (Number(booking.price_per_night) * calculateNights(booking.start_date, booking.end_date)).toFixed(2)}</span>
                           </div>
                         </div>
                       </div>

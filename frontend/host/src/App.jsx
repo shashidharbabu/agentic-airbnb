@@ -14,11 +14,17 @@ import StepHighlights from './pages/onboarding/StepHighlights'
 import StepAmenities from './pages/onboarding/StepAmenities'
 import StepSafety from './pages/onboarding/StepSafety'
 import StepTitle from './pages/onboarding/StepTitle'
+import StepPhotos from './pages/onboarding/StepPhotos'
 import StepPricing from './pages/onboarding/StepPricing'
-import StepDiscounts from './pages/onboarding/StepDiscounts'
 import StepBooking from './pages/onboarding/StepBooking'
 import HostProfile from './pages/HostProfile'
 import ListingDetails from './pages/ListingDetails'
+import PricingAvailability from './pages/PricingAvailability'
+import LanguageCurrency from './pages/LanguageCurrency'
+import HostingResources from './pages/HostingResources'
+import GetHelp from './pages/GetHelp'
+import FindCoHost from './pages/FindCoHost'
+import ReferHost from './pages/ReferHost'
 import api from './api/client'
 import { AuthContext, useAuth } from './context/AuthContext'
 
@@ -165,6 +171,66 @@ export default function App() {
           )}
         />
         <Route
+          path="/host/listings/:id/pricing"
+          element={(
+            <RequireAuth>
+              <Layout>
+                <PricingAvailability />
+              </Layout>
+            </RequireAuth>
+          )}
+        />
+        <Route
+          path="/host/language"
+          element={(
+            <RequireAuth>
+              <Layout>
+                <LanguageCurrency />
+              </Layout>
+            </RequireAuth>
+          )}
+        />
+        <Route
+          path="/host/resources"
+          element={(
+            <RequireAuth>
+              <Layout>
+                <HostingResources />
+              </Layout>
+            </RequireAuth>
+          )}
+        />
+        <Route
+          path="/host/help"
+          element={(
+            <RequireAuth>
+              <Layout>
+                <GetHelp />
+              </Layout>
+            </RequireAuth>
+          )}
+        />
+        <Route
+          path="/host/co-host"
+          element={(
+            <RequireAuth>
+              <Layout>
+                <FindCoHost />
+              </Layout>
+            </RequireAuth>
+          )}
+        />
+        <Route
+          path="/host/refer"
+          element={(
+            <RequireAuth>
+              <Layout>
+                <ReferHost />
+              </Layout>
+            </RequireAuth>
+          )}
+        />
+        <Route
           path="/onboarding/type"
           element={(
             <RequireAuth>
@@ -245,21 +311,21 @@ export default function App() {
           )}
         />
         <Route
-          path="/onboarding/:id/pricing"
+          path="/onboarding/:id/photos"
           element={(
             <RequireAuth>
               <Layout>
-                <StepPricing />
+                <StepPhotos />
               </Layout>
             </RequireAuth>
           )}
         />
         <Route
-          path="/onboarding/:id/discounts"
+          path="/onboarding/:id/pricing"
           element={(
             <RequireAuth>
               <Layout>
-                <StepDiscounts />
+                <StepPricing />
               </Layout>
             </RequireAuth>
           )}

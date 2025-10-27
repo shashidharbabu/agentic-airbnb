@@ -3,6 +3,46 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/client'
 import OnboardingLayout from '../../components/OnboardingLayout'
 
+const countries = [
+  'United States',
+  'Canada',
+  'United Kingdom',
+  'Australia',
+  'Germany',
+  'France',
+  'Italy',
+  'Spain',
+  'Japan',
+  'China',
+  'India',
+  'Brazil',
+  'Mexico',
+  'Argentina',
+  'Netherlands',
+  'Belgium',
+  'Switzerland',
+  'Austria',
+  'Sweden',
+  'Norway',
+  'Denmark',
+  'Finland',
+  'Ireland',
+  'New Zealand',
+  'Singapore',
+  'South Korea',
+  'Thailand',
+  'Malaysia',
+  'Indonesia',
+  'Philippines',
+  'Vietnam',
+  'South Africa',
+  'Egypt',
+  'Morocco',
+  'Kenya',
+  'Nigeria',
+  'Other'
+];
+
 export default function StepLocation(){
   const nav = useNavigate()
   const { id } = useParams()
@@ -60,7 +100,24 @@ export default function StepLocation(){
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <input placeholder="ZIP" value={zip} onChange={e=>{ setZip(e.target.value); if (error) setError('') }} style={{ height: 48, padding: '0 12px', borderRadius:12, border:'1px solid #ddd' }} />
-          <input placeholder="Country" value={country} onChange={e=>{ setCountry(e.target.value); if (error) setError('') }} style={{ height: 48, padding: '0 12px', borderRadius:12, border:'1px solid #ddd' }} />
+          <select 
+            value={country} 
+            onChange={e=>{ setCountry(e.target.value); if (error) setError('') }} 
+            style={{ 
+              height: 48, 
+              padding: '0 12px', 
+              borderRadius:12, 
+              border:'1px solid #ddd',
+              background: '#fff',
+              fontSize: '16px',
+              cursor: 'pointer',
+              appearance: 'auto'
+            }}
+          >
+            {countries.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
       </div>
       {error && <div style={{ color:'#d93025', marginTop:16, fontFamily:"'Airbnb Cereal VF', Circular, -apple-system, 'system-ui', Roboto, 'Helvetica Neue', sans-serif" }}>{error}</div>}

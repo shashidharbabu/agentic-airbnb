@@ -20,12 +20,22 @@ const PropertyCard = ({ property, isFavorited, onToggleFavorite, onClick }) => {
     return types[type] || type;
   };
 
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    // If it's already a full URL, return as-is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    // Otherwise, prepend the host backend URL where images are stored
+    return `http://localhost:4000${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+  };
+
   return (
     <div className="property-card" onClick={onClick}>
       <div className="property-image-container">
         {property.main_photo ? (
           <img 
-            src={property.main_photo} 
+            src={getImageUrl(property.main_photo)} 
             alt={property.name}
             className="property-image"
           />

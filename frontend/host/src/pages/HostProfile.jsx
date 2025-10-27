@@ -27,6 +27,8 @@ export default function HostProfile() {
   const [editingBio, setEditingBio] = useState(false)
   const [savingBio, setSavingBio] = useState(false)
   const [bioError, setBioError] = useState('')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
 
   const canSave = useMemo(() => {
     return Boolean(
@@ -53,10 +55,66 @@ export default function HostProfile() {
     email: form.email || currentUser?.email || 'Not provided',
     phone: form.phone || currentUser?.phone || 'Not provided',
     location: form.location || currentUser?.location || 'Not provided',
-    bio: form.bio || currentUser?.bio || ''
+    bio: form.bio || currentUser?.bio || '',
+    avatar_url: currentUser?.avatar_url || null
   }), [form, currentUser])
 
   const initial = (baseDetails.name || baseDetails.email || 'Host').charAt(0).toUpperCase()
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setAvatarError('Please upload a valid image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('File size must be less than 5MB')
+      return
+    }
+
+    setAvatarError('')
+    setUploadingAvatar(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+
+      const response = await api.post('/auth/profile/picture', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      console.log('Avatar uploaded:', response.data)
+      await refreshAuth()
+    } catch (err) {
+      console.error('Avatar upload error:', err)
+      setAvatarError(err?.response?.data?.error || 'Failed to upload avatar')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
+  const handleAvatarDelete = async () => {
+    if (!confirm('Are you sure you want to delete your profile picture?')) return
+
+    setUploadingAvatar(true)
+    setAvatarError('')
+
+    try {
+      await api.delete('/auth/profile/picture')
+      await refreshAuth()
+    } catch (err) {
+      console.error('Avatar delete error:', err)
+      setAvatarError('Failed to delete avatar')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
 
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }))
@@ -261,7 +319,7 @@ export default function HostProfile() {
                 width: 180,
                 height: 180,
                 borderRadius: '50%',
-                background: '#111',
+                background: baseDetails.avatar_url ? '#fff' : '#111',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -269,44 +327,104 @@ export default function HostProfile() {
                 fontSize: 64,
                 fontWeight: 700,
                 letterSpacing: 2,
-                boxShadow: '0 12px 40px rgba(0,0,0,0.18)'
+                boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+                overflow: 'hidden',
+                border: baseDetails.avatar_url ? '2px solid #ebebeb' : 'none'
               }}
               aria-label="Profile avatar"
             >
-              {initial || 'H'}
+              {baseDetails.avatar_url ? (
+                <img
+                  src={`http://localhost:4000${baseDetails.avatar_url}`}
+                  alt={baseDetails.name}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
+                />
+              ) : (
+                <span>{initial || 'H'}</span>
+              )}
             </div>
-            <button
-              type="button"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                borderRadius: 20,
-                border: '1px solid #000',
-                fontSize: 14,
-                fontWeight: 600,
-                background: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              <span>
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#000"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+            <div style={{ display: 'flex', gap: 12 }}>
+              <input
+                type="file"
+                id="avatar-upload"
+                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                onChange={handleAvatarUpload}
+                style={{ display: 'none' }}
+                disabled={uploadingAvatar}
+              />
+              <label
+                htmlFor="avatar-upload"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 16px',
+                  borderRadius: 20,
+                  border: '1px solid #000',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: '#fff',
+                  cursor: uploadingAvatar ? 'wait' : 'pointer',
+                  opacity: uploadingAvatar ? 0.6 : 1
+                }}
+              >
+                <span>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#000"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 5v14" />
+                    <path d="M5 12h14" />
+                  </svg>
+                </span>
+                {uploadingAvatar ? 'Uploading...' : baseDetails.avatar_url ? 'Change' : 'Add'}
+              </label>
+              {baseDetails.avatar_url && (
+                <button
+                  type="button"
+                  onClick={handleAvatarDelete}
+                  disabled={uploadingAvatar}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 20,
+                    border: '1px solid #d93025',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    background: '#fff',
+                    color: '#d93025',
+                    cursor: uploadingAvatar ? 'wait' : 'pointer',
+                    opacity: uploadingAvatar ? 0.6 : 1
+                  }}
                 >
-                  <path d="M12 5v14" />
-                  <path d="M5 12h14" />
-                </svg>
-              </span>
-              Add
-            </button>
+                  Delete
+                </button>
+              )}
+            </div>
+            {avatarError && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: '#fff5f5',
+                  color: '#c13515',
+                  fontSize: 13,
+                  textAlign: 'center',
+                  maxWidth: 240
+                }}
+              >
+                {avatarError}
+              </div>
+            )}
           </div>
 
           <div

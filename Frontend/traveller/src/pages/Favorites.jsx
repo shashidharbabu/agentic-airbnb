@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PropertyCard from '../components/PropertyCard';
-import { mockProperties } from '../data/mockProperties';
+import { favoritesAPI } from '../services/api';
 
 const Favorites = () => {
   const navigate = useNavigate();
@@ -24,42 +24,13 @@ const Favorites = () => {
   const loadFavorites = async () => {
     try {
       setLoading(true);
-      
-      try {
-        const response = await favoritesAPI.getTravelerFavorites(traveler.id);
-        setFavorites(response.data.favorites);
-        return;
-      } catch (dbError) {
-        console.log('Database not available, using localStorage fallback:', dbError.message);
-      }
-      
-      const favoriteIds = JSON.parse(localStorage.getItem('favorites') || '[]');
-      
-      const favoriteProperties = favoriteIds.map(propertyId => {
-        const property = mockProperties.find(p => p.id === propertyId);
-        if (property) {
-          return {
-            id: property.id,
-            property_id: property.id,
-            property_name: property.name,
-            property_location: property.location,
-            property_price: property.price,
-            property_image: property.image,
-            property_type: 'Apartment',
-            max_guests: property.max_guests || 4,
-            bedrooms: property.bedrooms || 2,
-            bathrooms: property.bathrooms || 1,
-            rating: property.rating || 4.5,
-            favorited_at: new Date().toISOString()
-          };
-        }
-        return null;
-      }).filter(Boolean); 
-      
-      setFavorites(favoriteProperties);
+      // Load favorites from database API only - NO mock data or localStorage
+      const response = await favoritesAPI.getTravelerFavorites(traveler.id);
+      setFavorites(response.data.favorites || []);
     } catch (err) {
       setError('Failed to load favorites');
       console.error('Error loading favorites:', err);
+      setFavorites([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -68,19 +39,8 @@ const Favorites = () => {
   const handleRemoveFavorite = async (propertyId) => {
     try {
       setRemoving(propertyId);
-      
-      try {
-        await favoritesAPI.remove(propertyId);
-        setFavorites(prev => prev.filter(fav => fav.property_id !== propertyId));
-        return;
-      } catch (dbError) {
-        console.log('Database not available, using localStorage fallback:', dbError.message);
-      }
-      
-      const favoriteIds = JSON.parse(localStorage.getItem('favorites') || '[]');
-      const updatedFavorites = favoriteIds.filter(id => id !== propertyId);
-      localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
-      
+      // Remove from database only - NO localStorage
+      await favoritesAPI.remove(propertyId);
       setFavorites(prev => prev.filter(fav => fav.property_id !== propertyId));
     } catch (err) {
       console.error('Error removing favorite:', err);

@@ -25,7 +25,7 @@ export default function StepTitle(){
 
     await api.put(`/properties/${id}`, { name: trimmedName, description: trimmedDescription })
     if (error) setError('')
-    nav(`/onboarding/${id}/pricing`)
+    nav(`/onboarding/${id}/photos`)
   }
 
   const footer = (

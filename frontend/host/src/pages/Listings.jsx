@@ -262,9 +262,6 @@ export default function Listings() {
                   <button className="outline-button" type="button" onClick={() => navigate(`/host/listings/${listing.id}/pricing`)}>
                     Pricing &amp; availability
                   </button>
-                  <button className="outline-button" type="button" onClick={() => navigate(`/host/listings/${listing.id}/reservations`)}>
-                    Reservations
-                  </button>
                 </div>
               </div>
             </article>

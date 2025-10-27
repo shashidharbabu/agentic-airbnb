@@ -68,6 +68,12 @@ export default function Bookings() {
 
   useEffect(() => {
     loadBookings()
+    // Poll for new bookings every 30 seconds for real-time updates
+    const pollInterval = setInterval(() => {
+      loadBookings()
+    }, 30000)
+    
+    return () => clearInterval(pollInterval)
   }, [loadBookings])
 
   const handleDecision = async (id, action) => {
@@ -180,6 +186,25 @@ export default function Bookings() {
                       <span>Submitted</span>
                     </div>
                   </div>
+
+                  {booking.totalPrice && (
+                    <div className="booking-card__row">
+                      <span className="booking-card__label">Total</span>
+                      <div className="booking-card__value">
+                        <strong>${Number(booking.totalPrice).toFixed(2)}</strong>
+                        <span>{nights ? `$${(Number(booking.totalPrice) / nights).toFixed(2)} per night` : 'Total amount'}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {booking.specialRequests && (
+                    <div className="booking-card__row booking-card__row--full">
+                      <span className="booking-card__label">Special Requests</span>
+                      <div className="booking-card__value">
+                        <p style={{ margin: 0, fontStyle: 'italic', color: '#484848' }}>{booking.specialRequests}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {status === 'PENDING' ? (

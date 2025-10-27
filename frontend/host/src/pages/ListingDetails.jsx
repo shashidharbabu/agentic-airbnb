@@ -77,6 +77,9 @@ export default function ListingDetails() {
   const [editing, setEditing] = useState(false)
   const [property, setProperty] = useState(null)
   const [form, setForm] = useState(() => createEmptyForm())
+  const [photos, setPhotos] = useState([])
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
 
   const propertyId = useMemo(() => Number(id), [id])
 
@@ -123,15 +126,26 @@ export default function ListingDetails() {
     if (!propertyId) return
     setLoading(true)
     setError('')
+    console.log('🔍 [ListingDetails] Loading property ID:', propertyId)
     try {
       const { data } = await api.get(`/properties/${propertyId}`)
+      console.log('📦 [ListingDetails] API Response:', data)
       if (!data?.property) {
+        console.error('❌ [ListingDetails] No property in response')
         setError('We could not find that listing.')
         return
       }
       setProperty(data.property)
       syncForm(data.property)
+      // Load photos
+      if (data.photos && Array.isArray(data.photos)) {
+        console.log(`📸 [ListingDetails] Loaded ${data.photos.length} photos:`, data.photos)
+        setPhotos(data.photos)
+      } else {
+        console.warn('⚠️ [ListingDetails] No photos array in response')
+      }
     } catch (err) {
+      console.error('💥 [ListingDetails] Error loading property:', err)
       if (err?.response?.status === 404) {
         setError('We could not find that listing.')
       } else if (err?.response?.status === 401) {
@@ -146,6 +160,51 @@ export default function ListingDetails() {
       setLoading(false)
     }
   }, [propertyId, refreshAuth, syncForm])
+
+  const handlePhotoUpload = async (event) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+    
+    setUploadingPhoto(true)
+    setPhotoError('')
+    
+    try {
+      const formData = new FormData()
+      for (let i = 0; i < files.length; i++) {
+        formData.append('photos', files[i])
+      }
+      
+      const { data } = await api.post(`/properties/${propertyId}/photos`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      
+      if (data.photos && Array.isArray(data.photos)) {
+        setPhotos(data.photos)
+        setSuccess('Photos uploaded successfully!')
+        setTimeout(() => setSuccess(''), 3000)
+      }
+    } catch (err) {
+      setPhotoError('Failed to upload photos. Please try again.')
+      console.error('Photo upload error:', err)
+    } finally {
+      setUploadingPhoto(false)
+      event.target.value = '' // Reset file input
+    }
+  }
+
+  const handlePhotoDelete = async (photoId) => {
+    if (!window.confirm('Are you sure you want to delete this photo?')) return
+    
+    try {
+      await api.delete(`/properties/${propertyId}/photos/${photoId}`)
+      setPhotos(prev => prev.filter(p => p.id !== photoId))
+      setSuccess('Photo deleted successfully!')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      setPhotoError('Failed to delete photo. Please try again.')
+      console.error('Photo delete error:', err)
+    }
+  }
 
   useEffect(() => {
     loadProperty()
@@ -299,18 +358,77 @@ export default function ListingDetails() {
 
       {error ? <div className="listing-details__alert listing-details__alert--error">{error}</div> : null}
       {success ? <div className="listing-details__alert listing-details__alert--success">{success}</div> : null}
+      {photoError ? <div className="listing-details__alert listing-details__alert--error">{photoError}</div> : null}
 
       {loading ? (
         <div className="listing-details__skeleton">Loading listing details…</div>
       ) : !property ? (
         <div className="listing-details__empty">We could not load this listing.</div>
       ) : (
-        <form id="listing-details-form" className="listing-details__form" onSubmit={handleSubmit}>
-          <section className="listing-details__section">
+        <>
+          {/* Photo Gallery Section */}
+          <section className="listing-details__section listing-details__photos">
             <header>
-              <h2>Basics</h2>
-              <p>Update essential information for guests.</p>
+              <h2>Photos</h2>
+              <p>Show guests what your place looks like.</p>
             </header>
+            
+            <div className="photos-grid">
+              {photos.length > 0 ? (
+                photos.map((photo) => (
+                  <div key={photo.id} className="photo-card">
+                    <img 
+                      src={`http://localhost:4000${photo.file_path}`} 
+                      alt="Property" 
+                      onError={(e) => {
+                        e.target.src = photo.file_path.startsWith('http') ? photo.file_path : `http://localhost:4000${photo.file_path}`
+                      }}
+                    />
+                    {editing && (
+                      <button
+                        type="button"
+                        className="photo-delete-btn"
+                        onClick={() => handlePhotoDelete(photo.id)}
+                        title="Delete photo"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="photos-empty">
+                  <p>No photos yet. {editing ? 'Upload some to showcase your property!' : 'Click "Edit listing" to add photos.'}</p>
+                </div>
+              )}
+            </div>
+
+            {editing && (
+              <div className="photo-upload-section">
+                <label className="photo-upload-label">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoUpload}
+                    disabled={uploadingPhoto}
+                    style={{ display: 'none' }}
+                  />
+                  <span className="upload-button">
+                    {uploadingPhoto ? '📤 Uploading...' : '📷 Upload Photos'}
+                  </span>
+                </label>
+                <p className="photo-upload-hint">You can select multiple photos at once</p>
+              </div>
+            )}
+          </section>
+
+          <form id="listing-details-form" className="listing-details__form" onSubmit={handleSubmit}>
+            <section className="listing-details__section">
+              <header>
+                <h2>Basics</h2>
+                <p>Update essential information for guests.</p>
+              </header>
             <div className="listing-details__grid listing-details__grid--two">
               <label>
                 <span>Name</span>
@@ -420,22 +538,66 @@ export default function ListingDetails() {
           <section className="listing-details__section">
             <header>
               <h2>Amenities & highlights</h2>
-              <p>List each item on a new line. We will create guest-friendly tags.</p>
+              <p>{editing ? 'List each item on a new line. We will create guest-friendly tags.' : 'Features and highlights of your property.'}</p>
             </header>
-            <div className="listing-details__grid listing-details__grid--three">
-              <label>
-                <span>Amenities</span>
-                <textarea value={form.amenitiesText} onChange={handleChange('amenitiesText')} disabled={!editing} rows={6} placeholder="Wifi\nKitchen\nFree parking" />
-              </label>
-              <label>
-                <span>Highlights</span>
-                <textarea value={form.highlightsText} onChange={handleChange('highlightsText')} disabled={!editing} rows={6} placeholder="City skyline view" />
-              </label>
-              <label>
-                <span>Safety</span>
-                <textarea value={form.safetyText} onChange={handleChange('safetyText')} disabled={!editing} rows={6} placeholder="Smoke detector\nFire extinguisher" />
-              </label>
-            </div>
+            
+            {editing ? (
+              <div className="listing-details__grid listing-details__grid--three">
+                <label>
+                  <span>Amenities</span>
+                  <textarea value={form.amenitiesText} onChange={handleChange('amenitiesText')} rows={6} placeholder="Wifi&#10;Kitchen&#10;Free parking" />
+                </label>
+                <label>
+                  <span>Highlights</span>
+                  <textarea value={form.highlightsText} onChange={handleChange('highlightsText')} rows={6} placeholder="City skyline view&#10;Family-friendly" />
+                </label>
+                <label>
+                  <span>Safety</span>
+                  <textarea value={form.safetyText} onChange={handleChange('safetyText')} rows={6} placeholder="Smoke detector&#10;Fire extinguisher" />
+                </label>
+              </div>
+            ) : (
+              <div className="amenities-display-grid">
+                <div className="amenities-category">
+                  <h3>🏠 Amenities</h3>
+                  <div className="tags-container">
+                    {textToList(form.amenitiesText).length > 0 ? (
+                      textToList(form.amenitiesText).map((item, index) => (
+                        <span key={index} className="tag tag-amenity">{item}</span>
+                      ))
+                    ) : (
+                      <span className="no-items">No amenities added</span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="amenities-category">
+                  <h3>✨ Highlights</h3>
+                  <div className="tags-container">
+                    {textToList(form.highlightsText).length > 0 ? (
+                      textToList(form.highlightsText).map((item, index) => (
+                        <span key={index} className="tag tag-highlight">{item}</span>
+                      ))
+                    ) : (
+                      <span className="no-items">No highlights added</span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="amenities-category">
+                  <h3>🛡️ Safety</h3>
+                  <div className="tags-container">
+                    {textToList(form.safetyText).length > 0 ? (
+                      textToList(form.safetyText).map((item, index) => (
+                        <span key={index} className="tag tag-safety">{item}</span>
+                      ))
+                    ) : (
+                      <span className="no-items">No safety features added</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="listing-details__section">
@@ -474,6 +636,7 @@ export default function ListingDetails() {
             </div>
           </section>
         </form>
+        </>
       )}
     </div>
   )

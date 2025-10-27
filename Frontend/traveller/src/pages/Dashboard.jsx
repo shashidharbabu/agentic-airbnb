@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { favoritesAPI } from '../services/api';
+import { favoritesAPI, propertiesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import PropertyCard from '../components/PropertyCard';
 import SearchBar from '../components/SearchBar';
 import AIAgentPanel from '../components/AIAgentPanel';
-import { mockProperties } from '../data/mockProperties';
+// Switched from mock data to live API-backed search
 
 const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -54,62 +54,28 @@ const Dashboard = () => {
     setError(null);
 
     try {
-      let filteredProperties = [...mockProperties];
-
-      if (searchData.location) {
-        filteredProperties = filteredProperties.filter(property =>
-          property.location.toLowerCase().includes(searchData.location.toLowerCase()) ||
-          property.name.toLowerCase().includes(searchData.location.toLowerCase())
-        );
-      }
-
-      if (searchData.guests) {
-        const guestCount = parseInt(searchData.guests);
-        filteredProperties = filteredProperties.filter(property => 
-          property.max_guests >= guestCount
-        );
-      }
-
-      if (searchData.min_price) {
-        const minPrice = parseFloat(searchData.min_price);
-        filteredProperties = filteredProperties.filter(property => 
-          property.price >= minPrice
-        );
-      }
-
-      if (searchData.max_price) {
-        const maxPrice = parseFloat(searchData.max_price);
-        filteredProperties = filteredProperties.filter(property => 
-          property.price <= maxPrice
-        );
-      }
-
-      const transformedProperties = filteredProperties.map(property => ({
-        id: property.id,
-        name: property.name,
-        location: property.location,
-        price_per_night: property.price,
-        property_type: 'Apartment',
-        max_guests: property.max_guests || 4,
-        bedrooms: property.bedrooms || 2,
-        bathrooms: property.bathrooms || 1,
-        rating: property.rating || 4.5,
-        images: [property.image],
-        amenities: ['WiFi', 'Kitchen', 'Parking', 'Air conditioning'],
-        description: `Beautiful ${property.name} located in ${property.location}.`
-      }));
-
       const pageNum = Number(searchData.page) || 1;
-      const itemsPerPage = 12;
-      const startIndex = (pageNum - 1) * itemsPerPage;
-      const endIndex = startIndex + itemsPerPage;
-      const paginatedProperties = transformedProperties.slice(startIndex, endIndex);
+      const params = {};
+      
+      // Only include non-empty parameters
+      if (searchData.location) params.location = searchData.location;
+      if (searchData.check_in) params.check_in = searchData.check_in;
+      if (searchData.check_out) params.check_out = searchData.check_out;
+      if (searchData.guests && Number(searchData.guests) > 0) params.guests = Number(searchData.guests);
+      if (searchData.property_type) params.property_type = searchData.property_type;
+      if (searchData.min_price) params.min_price = Number(searchData.min_price);
+      if (searchData.max_price) params.max_price = Number(searchData.max_price);
+      
+      params.page = pageNum;
+      params.limit = 12;
 
-      setProperties(paginatedProperties);
+      const { data } = await propertiesAPI.search(params);
+      const list = Array.isArray(data?.properties) ? data.properties : [];
+      setProperties(list);
       setPagination({
         page: pageNum,
-        pages: Math.ceil(filteredProperties.length / itemsPerPage),
-        total: filteredProperties.length
+        pages: data?.pagination?.pages || 1,
+        total: data?.pagination?.total || list.length
       });
     } catch (err) {
       setError('Failed to load properties. Please try again.');
@@ -121,10 +87,13 @@ const Dashboard = () => {
 
   const loadFavorites = async (travelerId) => {
     try {
-      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-      setFavorites(new Set(favorites));
+      // Load favorites from database API only - NO localStorage
+      const response = await favoritesAPI.getTravelerFavorites(travelerId);
+      const favoriteIds = (response.data.favorites || []).map(fav => fav.property_id);
+      setFavorites(new Set(favoriteIds));
     } catch (err) {
       console.error('Error loading favorites:', err);
+      setFavorites(new Set());
     }
   };
 
@@ -156,6 +125,8 @@ const Dashboard = () => {
     }
 
     const isFavorited = favorites.has(propertyId);
+    
+    // Optimistically update UI
     setFavorites((prev) => {
       const next = new Set(prev);
       if (isFavorited) next.delete(propertyId);
@@ -164,16 +135,15 @@ const Dashboard = () => {
     });
 
     try {
-      const favoritesList = JSON.parse(localStorage.getItem('favorites') || '[]');
+      // Update database via API only - NO localStorage
       if (isFavorited) {
-        const updatedFavorites = favoritesList.filter(id => id !== propertyId);
-        localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
+        await favoritesAPI.remove(propertyId);
       } else {
-        const updatedFavorites = [...favoritesList, propertyId];
-        localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
+        await favoritesAPI.add(propertyId);
       }
     } catch (err) {
       console.error('Error toggling favorite:', err);
+      // Revert on error
       setFavorites((prev) => {
         const next = new Set(prev);
         if (isFavorited) next.add(propertyId);

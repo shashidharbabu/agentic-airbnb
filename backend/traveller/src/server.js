@@ -13,6 +13,9 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '5001', 10);
 const ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173';
 
+console.log('🔥 TRAVELLER DEBUG: WEB_ORIGIN from process.env:', process.env.WEB_ORIGIN);
+console.log('🔥 TRAVELLER DEBUG: ORIGIN being used:', ORIGIN);
+
 testConnection();
 
 const sessionStore = new MySQLStore({
@@ -59,29 +62,119 @@ app.use(session({
 
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
+// Swagger API Documentation Configuration
 const swaggerSpec = swaggerJsdoc({
   definition: {
     openapi: '3.0.0',
     info: { 
       title: 'Airbnb Traveler API', 
       version: '1.0.0',
-      description: 'API for Airbnb Traveler features including authentication, property search, bookings, and favorites'
+      description: 'RESTful API for Airbnb travelers to search properties, make bookings, manage favorites, and update profiles. Supports session-based authentication and comprehensive property search with filters.',
+      contact: {
+        name: 'API Support',
+        email: 'support@airbnb-traveler.com'
+      },
+      license: {
+        name: 'MIT',
+        url: 'https://opensource.org/licenses/MIT'
+      }
     },
-    servers: [{ url: `http://localhost:${PORT}` }],
+    servers: [
+      { 
+        url: `http://localhost:${PORT}`,
+        description: 'Development Server'
+      }
+    ],
     components: {
       securitySchemes: {
         sessionAuth: {
           type: 'apiKey',
           in: 'cookie',
-          name: 'airbnb_traveller.sid'
+          name: 'airbnb_traveller.sid',
+          description: 'Session-based authentication using HTTP-only cookies'
+        }
+      },
+      schemas: {
+        Traveler: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', description: 'Traveler ID' },
+            email: { type: 'string', format: 'email', description: 'Traveler email' },
+            name: { type: 'string', description: 'Traveler name' },
+            phone: { type: 'string', description: 'Phone number' },
+            about_me: { type: 'string', description: 'About me section' },
+            city: { type: 'string', description: 'City' },
+            state: { type: 'string', description: 'State abbreviation' },
+            country: { type: 'string', description: 'Country' },
+            languages: { type: 'array', items: { type: 'string' }, description: 'Languages spoken' },
+            gender: { type: 'string', description: 'Gender' },
+            profile_picture: { type: 'string', description: 'Profile picture URL' }
+          }
+        },
+        Property: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', description: 'Property ID' },
+            name: { type: 'string', description: 'Property name' },
+            description: { type: 'string', description: 'Property description' },
+            location: { type: 'string', description: 'Property location' },
+            city: { type: 'string', description: 'City' },
+            state: { type: 'string', description: 'State' },
+            country: { type: 'string', description: 'Country' },
+            price_per_night: { type: 'number', description: 'Price per night in USD' },
+            bedrooms: { type: 'integer', description: 'Number of bedrooms' },
+            bathrooms: { type: 'number', description: 'Number of bathrooms' },
+            max_guests: { type: 'integer', description: 'Maximum guests allowed' },
+            property_type: { type: 'string', description: 'Type of property' },
+            amenities: { type: 'array', items: { type: 'string' }, description: 'List of amenities' },
+            main_photo: { type: 'string', description: 'Main property photo URL' },
+            owner_name: { type: 'string', description: 'Property owner name' }
+          }
+        },
+        Booking: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', description: 'Booking ID' },
+            property_id: { type: 'integer', description: 'Property ID' },
+            property_name: { type: 'string', description: 'Property name' },
+            start_date: { type: 'string', format: 'date', description: 'Check-in date' },
+            end_date: { type: 'string', format: 'date', description: 'Check-out date' },
+            guests: { type: 'integer', description: 'Number of guests' },
+            status: { type: 'string', enum: ['PENDING', 'ACCEPTED', 'CANCELLED'], description: 'Booking status' },
+            total_price: { type: 'number', description: 'Total booking price' },
+            special_requests: { type: 'string', description: 'Special requests' },
+            created_at: { type: 'string', format: 'date-time', description: 'Booking creation timestamp' }
+          }
+        },
+        Favorite: {
+          type: 'object',
+          properties: {
+            favorite_id: { type: 'integer', description: 'Favorite ID' },
+            property_id: { type: 'integer', description: 'Property ID' },
+            property_name: { type: 'string', description: 'Property name' },
+            price_per_night: { type: 'number', description: 'Price per night' },
+            main_photo: { type: 'string', description: 'Property photo URL' },
+            favorited_at: { type: 'string', format: 'date-time', description: 'When favorited' }
+          }
         }
       }
-    }
+    },
+    tags: [
+      { name: 'Authentication', description: 'Traveler authentication endpoints (signup, login, logout)' },
+      { name: 'Traveler', description: 'Traveler profile management endpoints' },
+      { name: 'Properties', description: 'Property search and details endpoints' },
+      { name: 'Bookings', description: 'Booking creation and management endpoints' },
+      { name: 'Favorites', description: 'Favorite properties management endpoints' }
+    ]
   },
-  apis: [path.join(__dirname, './routes/*.js')]
+  apis: ['./src/routes/*.js', './src/server.js']
 });
 
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Airbnb Traveler API Documentation',
+  customfavIcon: '/favicon.ico'
+}));
 
 app.get('/health', (req, res) => {
   res.json({ 

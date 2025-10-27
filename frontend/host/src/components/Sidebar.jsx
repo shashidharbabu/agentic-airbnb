@@ -137,11 +137,11 @@ export default function Sidebar({ onClose }) {
 
           {/* Menu Sections */}
           <div className="menu-section">
-            <button className="menu-item" onClick={() => handleMenuClick('/host/account-settings')}>
+            <button className="menu-item" onClick={() => handleMenuClick('/host/profile')}>
               <span className="menu-icon">{icons.account}</span>
               <span>Account settings</span>
             </button>
-            <button className="menu-item" onClick={() => handleMenuClick('/host/languages')}>
+            <button className="menu-item" onClick={() => handleMenuClick('/host/language')}>
               <span className="menu-icon">{icons.language}</span>
               <span>Languages & currency</span>
             </button>

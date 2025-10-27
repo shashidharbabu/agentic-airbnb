@@ -37,11 +37,24 @@ router.post('/', ensureAuth, async (req, res) => {
 
     const conn = await pool.getConnection();
     try {
+      // Get traveler info for the booking
+      const [travelerRows] = await conn.execute(
+        'SELECT name, email FROM users WHERE id = ?',
+        [travelerId]
+      );
+
+      if (travelerRows.length === 0) {
+        return res.status(404).json({ error: 'Traveler not found' });
+      }
+
+      const traveler = travelerRows[0];
+
+      // Get property info (using host schema with price_per_night)
       const [propertyRows] = await conn.execute(
         `
-        SELECT id, name, price AS price_per_night, max_guests
+        SELECT id, name, price_per_night, max_guests, owner_id
         FROM properties
-        WHERE id = ? AND active = 1
+        WHERE id = ?
         `,
         [property_id]
       );
@@ -79,20 +92,23 @@ router.post('/', ensureAuth, async (req, res) => {
 
       const totalPrice = property.price_per_night * nights;
 
+      // Insert booking with traveler info (host schema compatible)
       const [result] = await conn.execute(
         `
         INSERT INTO bookings (
-          property_id, traveler_id, start_date, end_date, guests, total_price, status, special_requests
-        ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+          property_id, traveler_id, traveler_name, traveler_email,
+          start_date, end_date, guests, total_price, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
         `,
         [
           property_id,
           travelerId,
+          traveler.name,
+          traveler.email,
           start_date,
           end_date,
           guests,
-          totalPrice,
-          special_requests || ''
+          totalPrice
         ]
       );
 
@@ -104,12 +120,11 @@ router.post('/', ensureAuth, async (req, res) => {
           b.*,
           p.name AS property_name,
           p.location AS property_location,
-          p.price AS price_per_night,
-          u.name AS owner_name,
-          JSON_EXTRACT(p.images_json, '$[0]') AS property_photo
+          p.price_per_night,
+          o.name AS owner_name
         FROM bookings b
         LEFT JOIN properties p ON b.property_id = p.id
-        LEFT JOIN users u ON p.owner_id = u.id AND u.role = 'HOST'
+        LEFT JOIN owners o ON p.owner_id = o.id
         WHERE b.id = ?
         `,
         [bookingId]
@@ -155,20 +170,34 @@ router.get('/traveler/:id', ensureAuth, async (req, res) => {
           b.*,
           p.name AS property_name,
           p.location AS property_location,
-          p.price AS price_per_night,
+          p.price_per_night,
           p.bedrooms,
           p.bathrooms,
-          p.type AS property_type,
-          u.name AS owner_name,
-          JSON_EXTRACT(p.images_json, '$[0]') AS property_photo
+          p.property_type,
+          o.name AS owner_name
         FROM bookings b
         LEFT JOIN properties p ON b.property_id = p.id
-        LEFT JOIN users u ON p.owner_id = u.id AND u.role = 'HOST'
+        LEFT JOIN owners o ON p.owner_id = o.id
         ${whereClause}
         ORDER BY b.created_at DESC
         `,
         params
       );
+
+      // Fetch the main photo for each property
+      for (const booking of bookings) {
+        if (booking.property_id) {
+          const [photos] = await conn.query(
+            `SELECT file_path FROM property_photos 
+             WHERE property_id = ? 
+             ORDER BY id ASC
+             LIMIT 1`,
+            [booking.property_id]
+          );
+          
+          booking.property_photo = photos.length > 0 ? photos[0].file_path : null;
+        }
+      }
 
       return res.json({ bookings });
     } finally {
@@ -194,17 +223,16 @@ router.get('/:id', ensureAuth, async (req, res) => {
           p.name AS property_name,
           p.description AS property_description,
           p.location AS property_location,
-          p.price AS price_per_night,
+          p.price_per_night,
           p.bedrooms,
           p.bathrooms,
-          p.type AS property_type,
-          p.amenities_json AS amenities,
-          u.name AS owner_name,
-          u.email AS owner_email,
-          JSON_EXTRACT(p.images_json, '$[0]') AS property_photo
+          p.property_type,
+          p.amenities,
+          o.name AS owner_name,
+          o.email AS owner_email
         FROM bookings b
         LEFT JOIN properties p ON b.property_id = p.id
-        LEFT JOIN users u ON p.owner_id = u.id AND u.role = 'HOST'
+        LEFT JOIN owners o ON p.owner_id = o.id
         WHERE b.id = ? AND b.traveler_id = ?
         `,
         [bookingId, travelerId]
@@ -216,12 +244,15 @@ router.get('/:id', ensureAuth, async (req, res) => {
 
       const booking = bookings[0];
 
-      if (booking.amenities) {
+      // Parse amenities JSON if it's a string
+      if (booking.amenities && typeof booking.amenities === 'string') {
         try {
           booking.amenities = JSON.parse(booking.amenities);
         } catch {
           booking.amenities = [];
         }
+      } else if (!booking.amenities) {
+        booking.amenities = [];
       }
 
       return res.json({ booking });

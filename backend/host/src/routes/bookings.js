@@ -20,6 +20,8 @@ const BOOKING_SELECT_WITH_TRAVELER = `
     b.end_date,
     b.guests,
     b.status,
+    b.total_price,
+    b.special_requests,
     b.created_at,
     p.owner_id AS property_owner_id,
     p.name AS property_name,
@@ -46,6 +48,8 @@ const BOOKING_SELECT_LEGACY = `
     b.end_date,
     b.guests,
     b.status,
+    NULL AS total_price,
+    NULL AS special_requests,
     b.created_at,
     p.owner_id AS property_owner_id,
     p.name AS property_name,
@@ -123,6 +127,8 @@ const serializeBooking = (row) => ({
   guests: row.guests,
   createdAt: row.created_at,
   travelerId: row.traveler_id,
+  totalPrice: row.total_price,
+  specialRequests: row.special_requests,
   traveler: {
     name: row.traveler_account_name || row.traveler_name,
     email: row.traveler_account_email || row.traveler_email
@@ -156,6 +162,66 @@ router.get('/incoming', ensureAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('GET /bookings/incoming failed:', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// GET /bookings/property/:propertyId - Get all bookings for a specific property
+router.get('/property/:propertyId', ensureAuth, async (req, res) => {
+  try {
+    const propertyId = Number.parseInt(req.params.propertyId, 10);
+    if (Number.isNaN(propertyId)) {
+      return res.status(400).json({ error: 'invalid_property_id' });
+    }
+
+    const ownerId = req.session.owner.id;
+    const conn = await pool.getConnection();
+
+    try {
+      // First check if the property belongs to this owner
+      const [propertyRows] = await conn.execute(
+        'SELECT id, owner_id FROM properties WHERE id = :id',
+        { id: propertyId }
+      );
+
+      if (propertyRows.length === 0) {
+        return res.status(404).json({ error: 'property_not_found' });
+      }
+
+      if (propertyRows[0].owner_id !== ownerId) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+
+      // Fetch all bookings for this property
+      const base = supportsTravelerAccounts ? BOOKING_SELECT_WITH_TRAVELER : BOOKING_SELECT_LEGACY;
+      const query = `${base}
+WHERE p.id = :propertyId
+  AND p.owner_id = :ownerId
+ORDER BY b.start_date DESC, b.created_at DESC`;
+
+      const [rows] = await conn.execute(query, { propertyId, ownerId });
+
+      const bookings = rows.map(row => ({
+        id: row.id,
+        property_id: row.property_id,
+        traveler_id: row.traveler_id,
+        traveler_name: row.traveler_account_name || row.traveler_name,
+        traveler_email: row.traveler_account_email || row.traveler_email,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        guests: row.guests,
+        status: row.status,
+        total_price: row.total_price || null,
+        special_requests: row.special_requests || null,
+        created_at: row.created_at
+      }));
+
+      return res.json({ bookings });
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error(`GET /bookings/property/${req.params.propertyId} failed:`, err);
     return res.status(500).json({ error: 'internal_error' });
   }
 });

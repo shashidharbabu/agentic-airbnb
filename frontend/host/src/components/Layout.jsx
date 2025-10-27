@@ -11,11 +11,23 @@ export default function Layout({ children }) {
   const userName = currentUser?.name || currentUser?.email || 'Host';
 
   const menuIcons = {
-    listings: (
+    dashboard: (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M3.75 9.75 12 2.25l8.25 7.5" />
         <path d="M6 9.75v10.5h12V9.75" />
         <path d="M9.75 20.25v-6h4.5v6" />
+      </svg>
+    ),
+    listings: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.75 3.75h16.5" />
+        <path d="M3.75 8.25h16.5" />
+        <path d="M3.75 12.75h16.5" />
+        <path d="M3.75 17.25h16.5" />
+        <circle cx="6.75" cy="6" r="1.5" />
+        <circle cx="6.75" cy="10.5" r="1.5" />
+        <circle cx="6.75" cy="15" r="1.5" />
+        <circle cx="6.75" cy="19.5" r="1.5" />
       </svg>
     ),
     bookings: (
@@ -28,25 +40,12 @@ export default function Layout({ children }) {
         <path d="m9.75 13.5 1.875 1.875L14.25 12.75" />
       </svg>
     ),
-    calendar: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5.25 3.75h13.5" />
-        <path d="M6.75 6.75v-3" />
-        <path d="M17.25 6.75v-3" />
-        <path d="M4.5 7.5h15" />
-        <path d="M5.25 20.25h13.5a1.5 1.5 0 0 0 1.5-1.5V7.5H3.75v11.25a1.5 1.5 0 0 0 1.5 1.5Z" />
-        <path d="M8.25 12h2.25v2.25H8.25Z" />
-        <path d="M13.5 12h2.25v2.25H13.5Z" />
-        <path d="M8.25 15.75h2.25V18H8.25Z" />
-        <path d="M13.5 15.75h2.25V18H13.5Z" />
-      </svg>
-    ),
   };
 
   const menuItems = [
+    { label: 'Dashboard', path: '/', icon: menuIcons.dashboard },
     { label: 'Listings', path: '/host/listings', icon: menuIcons.listings },
     { label: 'Bookings', path: '/host/bookings', icon: menuIcons.bookings },
-    { label: 'Calendar', path: '/host/calendar', icon: menuIcons.calendar },
   ];
 
   return (
@@ -80,7 +79,7 @@ export default function Layout({ children }) {
           {/* Right Side - Profile & Actions */}
           <div className="header-right">
             {/* Switch to Traveling */}
-            <button className="switch-traveling" onClick={() => navigate('/traveler')}>
+            <button className="switch-traveling" onClick={() => window.location.href = 'http://localhost:5173/login'}>
               Switch to traveling
             </button>
 

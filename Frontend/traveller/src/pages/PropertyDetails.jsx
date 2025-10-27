@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { bookingsAPI, favoritesAPI } from '../services/api';
-import { mockProperties } from '../data/mockProperties';
+import { bookingsAPI, favoritesAPI, propertiesAPI } from '../services/api';
 
 const PropertyDetails = () => {
   const { id } = useParams();
@@ -42,44 +41,29 @@ const PropertyDetails = () => {
   const loadProperty = async () => {
     try {
       setLoading(true);
-      const foundProperty = mockProperties.find(p => p.id === parseInt(id));
-      
-      if (foundProperty) {
-        const propertyData = {
-          id: foundProperty.id,
-          name: foundProperty.name,
-          location: foundProperty.location,
-          price_per_night: foundProperty.price,
-          property_type: 'Apartment', 
-          description: `Beautiful ${foundProperty.name} located in ${foundProperty.location}. Perfect for your next getaway with modern amenities and comfortable accommodations.`,
-          max_guests: 4, 
-          bedrooms: 2, 
-          bathrooms: 1, 
-          amenities: [
-            'WiFi',
-            'Kitchen',
-            'Parking',
-            'Air conditioning',
-            'Heating',
-            'TV',
-            'Washer',
-            'Dryer',
-            'Pool',
-            'Gym'
-          ],
-          photos: [
-            { file_path: foundProperty.image },
-            { file_path: foundProperty.image }, 
-            { file_path: foundProperty.image }
-          ],
-          owner_name: 'John Doe',
-          owner_about: 'Experienced host with 5+ years of hosting guests from around the world.',
-          owner_phone: '+1 (555) 123-4567'
-        };
-        setProperty(propertyData);
-      } else {
+      const { data } = await propertiesAPI.getById(id);
+      const p = data?.property;
+      if (!p) {
         setError('Property not found');
+        return;
       }
+      const photos = Array.isArray(p.photos) ? p.photos : (data?.photos || []).map(ph => ({ file_path: ph.file_path }));
+      setProperty({
+        id: p.id,
+        name: p.name,
+        location: p.location,
+        price_per_night: p.price_per_night,
+        property_type: p.property_type,
+        description: p.description || '',
+        max_guests: p.max_guests,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        amenities: Array.isArray(p.amenities) ? p.amenities : [],
+        photos,
+        owner_name: p.owner_name || 'Host',
+        owner_about: p.owner_about || '',
+        owner_phone: ''
+      });
     } catch (err) {
       setError('Property not found');
       console.error('Error loading property:', err);
@@ -90,10 +74,12 @@ const PropertyDetails = () => {
 
   const checkFavorite = async () => {
     try {
-      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-      setIsFavorited(favorites.includes(parseInt(id)));
+      // Check favorites from database API only - NO localStorage
+      const response = await favoritesAPI.check(id);
+      setIsFavorited(response.data.isFavorite || false);
     } catch (err) {
       console.error('Error checking favorite:', err);
+      setIsFavorited(false);
     }
   };
 
@@ -115,16 +101,15 @@ const PropertyDetails = () => {
     }
 
     try {
-      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
       const propertyId = parseInt(id);
       
       if (isFavorited) {
-        const updatedFavorites = favorites.filter(id => id !== propertyId);
-        localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
+        // Remove from database API only - NO localStorage
+        await favoritesAPI.remove(propertyId);
         setIsFavorited(false);
       } else {
-        const updatedFavorites = [...favorites, propertyId];
-        localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
+        // Add to database API only - NO localStorage
+        await favoritesAPI.add(propertyId);
         setIsFavorited(true);
       }
     } catch (err) {
@@ -175,40 +160,17 @@ const PropertyDetails = () => {
       setBookingLoading(true);
       setBookingError(null);
       
-      try {
-        const bookingData = {
-          property_id: parseInt(id),
-          start_date: bookingData.start_date,
-          end_date: bookingData.end_date,
-          guests: parseInt(bookingData.guests)
-        };
-
-        const response = await bookingsAPI.create(bookingData);
-        console.log('Booking created:', response.data);
-
-        setBookingSuccess(true);
-        setTimeout(() => {
-          navigate('/bookings');
-        }, 2000);
-        return;
-      } catch (dbError) {
-        console.log('Database not available, using localStorage fallback:', dbError.message);
-      }
-      
-      const mockBooking = {
-        id: Date.now(), 
+      // Create booking via database API only - NO mock data or localStorage
+      const bookingPayload = {
         property_id: parseInt(id),
         start_date: bookingData.start_date,
         end_date: bookingData.end_date,
         guests: parseInt(bookingData.guests),
-        total_price: calculateTotal(),
-        status: 'PENDING',
-        created_at: new Date().toISOString()
+        special_requests: bookingData.special_requests || ''
       };
 
-      const bookings = JSON.parse(localStorage.getItem('bookings') || '[]');
-      bookings.push(mockBooking);
-      localStorage.setItem('bookings', JSON.stringify(bookings));
+      const response = await bookingsAPI.create(bookingPayload);
+      console.log('Booking created:', response.data);
 
       setBookingSuccess(true);
       setTimeout(() => {
@@ -282,14 +244,19 @@ const PropertyDetails = () => {
         <div className="property-images">
           {property.photos && property.photos.length > 0 ? (
             <div className="image-gallery">
-              {property.photos.map((photo, index) => (
-                <img
-                  key={index}
-                  src={photo.file_path}
-                  alt={`${property.name} - Image ${index + 1}`}
-                  className="property-image"
-                />
-              ))}
+              {property.photos.map((photo, index) => {
+                const imageSrc = photo.file_path?.startsWith('http') 
+                  ? photo.file_path 
+                  : `http://localhost:4000${photo.file_path}`;
+                return (
+                  <img
+                    key={index}
+                    src={imageSrc}
+                    alt={`${property.name} - Image ${index + 1}`}
+                    className="property-image"
+                  />
+                );
+              })}
             </div>
           ) : (
             <div className="image-placeholder">
