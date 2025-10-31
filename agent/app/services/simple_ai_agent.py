@@ -1,6 +1,5 @@
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from typing import Dict, List, Any, Optional
 from app.config_sqlite import settings
 from app.services.tavily_service import tavily_service
