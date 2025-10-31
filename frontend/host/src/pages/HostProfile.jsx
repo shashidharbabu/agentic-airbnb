@@ -31,12 +31,15 @@ export default function HostProfile() {
   const [avatarError, setAvatarError] = useState('')
 
   const canSave = useMemo(() => {
+    // Email is optional; if present must look like an email
+    const emailOk = !form.email || /\S+@\S+\.\S+/.test(form.email)
     return Boolean(
       form.name.trim() &&
       form.phone.trim() &&
-      form.location.trim()
+      form.location.trim() &&
+      emailOk
     )
-  }, [form.name, form.phone, form.location])
+  }, [form.name, form.phone, form.location, form.email])
 
   useEffect(() => {
     if (currentUser) {
@@ -147,6 +150,7 @@ export default function HostProfile() {
     try {
       await api.put('/auth/profile', {
         name: form.name.trim(),
+        email: form.email?.trim() || '',
         phone: form.phone.trim(),
         location: form.location.trim(),
         bio: form.bio.trim()
@@ -159,6 +163,8 @@ export default function HostProfile() {
       const message = err?.response?.data?.error
       if (message === 'phone_in_use') {
         setError('That phone number is already linked to another host.')
+      } else if (message === 'email_in_use') {
+        setError('That email is already linked to another host account.')
       } else if (message) {
         setError(message)
       } else {
@@ -501,15 +507,14 @@ export default function HostProfile() {
                     <input
                       type="email"
                       value={form.email}
-                      readOnly
+                      onChange={handleChange('email')}
                       style={{
                         width: '100%',
                         padding: '12px 14px',
                         border: '1px solid #dddddd',
                         borderRadius: 12,
                         fontSize: 16,
-                        color: '#717171',
-                        background: '#f7f7f7'
+                        color: '#222'
                       }}
                     />
                   ) : (

@@ -224,14 +224,30 @@ const History = () => {
 
                       <div className="pricing">
                         <div className="price-breakdown">
-                          <div className="price-item">
-                            <span>${Number(booking.price_per_night).toFixed(2)} × {calculateNights(booking.start_date, booking.end_date)} nights</span>
-                            <span>${(Number(booking.price_per_night) * calculateNights(booking.start_date, booking.end_date)).toFixed(2)}</span>
-                          </div>
-                          <div className="price-item total">
-                            <span>Total</span>
-                            <span>${booking.total_price ? Number(booking.total_price).toFixed(2) : (Number(booking.price_per_night) * calculateNights(booking.start_date, booking.end_date)).toFixed(2)}</span>
-                          </div>
+                          {(() => {
+                            const nights = calculateNights(booking.start_date, booking.end_date);
+                            const hasPpn = booking.price_per_night !== undefined && booking.price_per_night !== null && booking.price_per_night !== '';
+                            const pricePerNight = hasPpn ? Number(booking.price_per_night) : (booking.total_price && nights ? Number(booking.total_price) / nights : null);
+                            const lineTotal = pricePerNight !== null ? pricePerNight * nights : (booking.total_price !== undefined && booking.total_price !== null ? Number(booking.total_price) : null);
+                            return (
+                              <>
+                                <div className="price-item">
+                                  <span>
+                                    {pricePerNight !== null ? `$${pricePerNight.toFixed(2)} × ${nights} night${nights !== 1 ? 's' : ''}` : `${nights} night${nights !== 1 ? 's' : ''}`}
+                                  </span>
+                                  <span>{lineTotal !== null ? `$${lineTotal.toFixed(2)}` : '—'}</span>
+                                </div>
+                                <div className="price-item total">
+                                  <span>Total</span>
+                                  <span>
+                                    {booking.total_price !== undefined && booking.total_price !== null
+                                      ? `$${Number(booking.total_price).toFixed(2)}`
+                                      : (lineTotal !== null ? `$${lineTotal.toFixed(2)}` : '—')}
+                                  </span>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

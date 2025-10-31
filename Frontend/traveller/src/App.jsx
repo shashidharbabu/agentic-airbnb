@@ -18,7 +18,6 @@ import './App.css';
 
 function App() {
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
-  const [currentBooking, setCurrentBooking] = useState(null);
   const [hostModalOpen, setHostModalOpen] = useState(false);
 
   const handleOpenAI = () => {
@@ -120,7 +119,7 @@ function App() {
           <AIAgentPanel 
             isOpen={isAIPanelOpen}
             onClose={handleCloseAI}
-            currentBooking={currentBooking}
+            bookingId={null}
           />
         </div>
       </Router>

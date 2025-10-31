@@ -14,6 +14,8 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+// Use browser language for reCAPTCHA and SMS
+try { auth.useDeviceLanguage(); } catch {}
 
 export { auth, RecaptchaVerifier, signInWithPhoneNumber };
 

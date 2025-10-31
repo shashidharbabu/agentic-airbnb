@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { travelerAPI } from '../services/api';
+import api, { travelerAPI } from '../services/api';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -35,11 +35,25 @@ const Profile = () => {
     loadProfile();
   }, [isAuthenticated, navigate]);
 
+  // Build absolute URL for images served by the backend (e.g. /uploads/xyz.jpg)
+  const apiBase = useMemo(() => {
+    const base = api?.defaults?.baseURL || 'http://localhost:5001';
+    return base.endsWith('/') ? base.slice(0, -1) : base;
+  }, []);
+
+  const toAbsolute = (path) => {
+    if (!path) return '';
+    // If already absolute, return as-is
+    if (/^https?:\/\//i.test(path)) return path;
+    // Prefix backend base for server-served assets
+    return `${apiBase}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+
   const normalizeProfile = (data) => ({
     ...data,
     about_me: data.about ?? '',
     state: data.state_abbr ?? '',
-    profile_picture: data.profile_image_url ?? '',
+    profile_picture: toAbsolute(data.profile_image_url ?? ''),
     languages: Array.isArray(data.languages)
       ? data.languages
       : data.languages
@@ -223,10 +237,11 @@ const Profile = () => {
       setSaving(true);
       
       const formData = new FormData();
-      formData.append('profilePicture', file);
+      // Backend expects the field name 'profile_picture' (see uploadSingle('profile_picture'))
+      formData.append('profile_picture', file);
       
       const response = await travelerAPI.uploadProfilePicture(formData);
-      const imageUrl = response.data.profile_picture;
+      const imageUrl = toAbsolute(response.data.profile_picture);
       
       const updatedProfile = {
         ...profile,

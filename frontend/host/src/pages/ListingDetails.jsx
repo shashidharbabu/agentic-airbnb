@@ -80,6 +80,7 @@ export default function ListingDetails() {
   const [photos, setPhotos] = useState([])
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoError, setPhotoError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const propertyId = useMemo(() => Number(id), [id])
 
@@ -203,6 +204,40 @@ export default function ListingDetails() {
     } catch (err) {
       setPhotoError('Failed to delete photo. Please try again.')
       console.error('Photo delete error:', err)
+    }
+  }
+
+  const handleDeleteProperty = async () => {
+    const confirmMessage = `Are you sure you want to delete this property?\n\nProperty: ${property?.name || 'Unknown'}\n\nThis action CANNOT be undone and will permanently delete:\n• The property listing\n• All photos\n• All data associated with this property\n\nType "DELETE" to confirm:`
+    
+    const confirmation = window.prompt(confirmMessage)
+    
+    if (confirmation !== 'DELETE') {
+      if (confirmation !== null) {
+        alert('Deletion cancelled. You must type "DELETE" exactly to confirm.')
+      }
+      return
+    }
+
+    setDeleting(true)
+    setError('')
+    
+    try {
+      const response = await api.delete(`/properties/${propertyId}`)
+      
+      if (response.data?.ok) {
+        setSuccess('Property deleted successfully! Redirecting...')
+        setTimeout(() => {
+          navigate('/listings')
+        }, 1500)
+      } else {
+        throw new Error('Unexpected response from server')
+      }
+    } catch (err) {
+      console.error('Property delete error:', err)
+      const errorMessage = err.response?.data?.error || 'Failed to delete property. Please try again.'
+      setError(errorMessage)
+      setDeleting(false)
     }
   }
 
@@ -349,9 +384,20 @@ export default function ListingDetails() {
               </button>
             </div>
           ) : (
-            <button type="button" className="primary-button" onClick={() => setEditing(true)} disabled={loading || !!error}>
-              Edit listing
-            </button>
+            <div className="listing-details__action-group">
+              <button type="button" className="primary-button" onClick={() => setEditing(true)} disabled={loading || !!error || deleting}>
+                Edit listing
+              </button>
+              <button 
+                type="button" 
+                className="danger-button" 
+                onClick={handleDeleteProperty} 
+                disabled={loading || !!error || deleting || editing}
+                title="Delete this property permanently"
+              >
+                {deleting ? 'Deleting…' : 'Delete Property'}
+              </button>
+            </div>
           )}
         </div>
       </header>

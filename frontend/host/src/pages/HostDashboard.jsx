@@ -590,6 +590,19 @@ export default function HostDashboard() {
                         }}>
                           📅 {stayRange}
                         </div>
+                        {booking.specialRequests ? (
+                          <div style={{
+                            color: '#484848',
+                            fontSize: 12,
+                            background: '#fff',
+                            border: '1px solid #ebebeb',
+                            borderRadius: 8,
+                            padding: '8px 10px',
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            <strong>Special requests:</strong> {booking.specialRequests}
+                          </div>
+                        ) : null}
                       </div>
                       
                       <div style={{ display: 'flex', gap: 8 }}>

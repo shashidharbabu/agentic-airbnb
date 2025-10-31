@@ -395,4 +395,69 @@ router.delete('/:id/photos/:photoId', ensureAuth, async (req, res) => {
   }
 });
 
+// Delete entire property
+router.delete('/:id', ensureAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ownerId = req.session.owner.id;
+
+    const conn = await pool.getConnection();
+    try {
+      // Check if property exists and belongs to the owner
+      const [own] = await conn.execute('SELECT owner_id FROM properties WHERE id = :id', { id });
+      if (own.length === 0) {
+        return res.status(404).json({ error: 'Property not found' });
+      }
+      if (own[0].owner_id !== ownerId) {
+        return res.status(403).json({ error: 'You do not have permission to delete this property' });
+      }
+
+      // Check for active bookings
+      const [activeBookings] = await conn.execute(
+        `SELECT COUNT(*) as count FROM bookings 
+         WHERE property_id = :id 
+         AND status IN ('PENDING', 'ACCEPTED')
+         AND end_date >= CURDATE()`,
+        { id }
+      );
+
+      if (activeBookings[0].count > 0) {
+        return res.status(400).json({ 
+          error: 'Cannot delete property with active or upcoming bookings. Please cancel all bookings first.' 
+        });
+      }
+
+      // Get all property photos for cleanup
+      const [photos] = await conn.execute(
+        'SELECT file_path FROM property_photos WHERE property_id = :id',
+        { id }
+      );
+
+      // Delete property photos from database
+      await conn.execute('DELETE FROM property_photos WHERE property_id = :id', { id });
+
+      // Delete the property (this will cascade to related records if foreign keys are set up)
+      await conn.execute('DELETE FROM properties WHERE id = :id', { id });
+
+      // Best-effort delete photo files from disk
+      for (const photo of photos) {
+        try {
+          const absPath = path.join(__dirname, '..', '..', photo.file_path);
+          fs.unlink(absPath, () => {});
+        } catch {}
+      }
+
+      return res.json({ 
+        ok: true, 
+        message: 'Property deleted successfully' 
+      });
+    } finally {
+      conn.release();
+    }
+  } catch (e) {
+    console.error('Error deleting property:', e);
+    return res.status(500).json({ error: 'Failed to delete property. Please try again.' });
+  }
+});
+
 module.exports = router;

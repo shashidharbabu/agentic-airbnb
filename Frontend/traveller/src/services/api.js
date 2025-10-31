@@ -30,9 +30,16 @@ api.interceptors.response.use(
   (error) => {
     console.log('API error:', error.response?.status, error.config?.url, error.message);
     if (error.response?.status === 401) {
-      console.log('Unauthorized - redirecting to login');
-      localStorage.removeItem('traveler');
-      window.location.href = '/login';
+      const url = error.config?.url || '';
+      const isAuthLogin = url.includes('/api/auth/login');
+      const isOnLoginPage = typeof window !== 'undefined' && window.location?.pathname === '/login';
+      // Do not auto-redirect on 401 for the login request itself, or when already on login page
+      if (!isAuthLogin && !isOnLoginPage) {
+        console.log('Unauthorized - redirecting to login');
+        localStorage.removeItem('traveler');
+        window.location.href = '/login';
+      }
+      // Otherwise, let the caller handle the error (e.g., show inline error on login form)
     }
     return Promise.reject(error);
   }

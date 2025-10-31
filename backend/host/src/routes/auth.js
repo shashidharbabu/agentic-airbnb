@@ -25,6 +25,7 @@ const loginSchema = Joi.object({
 
 const updateProfileSchema = Joi.object({
   name: Joi.string().min(1).max(255).required(),
+  email: Joi.string().email().allow(null, '').optional(),
   phone: Joi.string().min(7).max(20).required(),
   location: Joi.string().min(2).max(255).required(),
   bio: Joi.string().max(1000).allow('').optional()
@@ -167,6 +168,7 @@ router.put('/profile', ensureAuth, async (req, res) => {
     if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
 
   const name = value.name.trim();
+  const email = typeof value.email === 'string' && value.email.trim().length > 0 ? value.email.trim().toLowerCase() : null;
   const phone = value.phone.trim();
   const location = value.location.trim();
   const bio = typeof value.bio === 'string' ? value.bio.trim() : '';
@@ -181,9 +183,27 @@ router.put('/profile', ensureAuth, async (req, res) => {
         return res.status(409).json({ error: 'phone_in_use' });
       }
 
+      // If email provided, ensure unique among other owners
+      if (email) {
+        const [emailRows] = await conn.execute(
+          'SELECT id FROM owners WHERE email = :email AND id != :id',
+          { email, id: ownerId }
+        );
+        if (emailRows.length > 0) {
+          return res.status(409).json({ error: 'email_in_use' });
+        }
+      }
+
+      // Build dynamic update to include email if provided (or set NULL if explicitly empty string)
+      const updateParts = ['name = :name', 'phone = :phone', 'location = :location', 'about = :bio'];
+      const params = { name, phone, location, bio, id: ownerId };
+      if (email !== null) {
+        updateParts.push('email = :email');
+        params.email = email;
+      }
       await conn.execute(
-        'UPDATE owners SET name = :name, phone = :phone, location = :location, about = :bio WHERE id = :id',
-        { name, phone, location, bio, id: ownerId }
+        `UPDATE owners SET ${updateParts.join(', ')} WHERE id = :id`,
+        params
       );
 
       // Fetch updated owner with avatar_url

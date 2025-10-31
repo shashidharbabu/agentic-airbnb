@@ -67,6 +67,38 @@ export default function HostLogin() {
     window.location.href = `${backendUrl}/auth/google`
   }
 
+  // Helper: initialize invisible reCAPTCHA
+  const initRecaptcha = () => {
+    const container = document.getElementById('recaptcha-container')
+    // If already rendered, just reset instead of creating again
+    if (container && window.recaptchaVerifier && typeof window.grecaptcha !== 'undefined' && window.recaptchaWidgetId !== undefined) {
+      try { window.grecaptcha.reset(window.recaptchaWidgetId) } catch {}
+      return window.recaptchaVerifier
+    }
+    if (container && !window.recaptchaVerifier) {
+      try {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'invisible',
+          callback: () => {
+            console.log('reCAPTCHA solved')
+          },
+          'expired-callback': () => {
+            console.log('reCAPTCHA expired')
+          }
+        })
+        // Explicitly render to avoid timeouts in some browsers
+        window.recaptchaVerifier.render().then((widgetId) => {
+          window.recaptchaWidgetId = widgetId
+          console.log('reCAPTCHA initialized')
+        })
+      } catch (error) {
+        console.error('reCAPTCHA init error:', error)
+        setError('Failed to initialize reCAPTCHA. Please refresh the page.')
+      }
+    }
+    return window.recaptchaVerifier
+  }
+
   // Initialize reCAPTCHA when main view is shown
   useEffect(() => {
     if (view === 'main') {
@@ -82,24 +114,7 @@ export default function HostLogin() {
 
       // Wait for DOM to be ready
       const timer = setTimeout(() => {
-        const container = document.getElementById('recaptcha-container')
-        if (container && !window.recaptchaVerifier) {
-          try {
-            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-              size: 'invisible',
-              callback: () => {
-                console.log('reCAPTCHA solved')
-              },
-              'expired-callback': () => {
-                console.log('reCAPTCHA expired')
-              }
-            })
-            console.log('reCAPTCHA initialized')
-          } catch (error) {
-            console.error('reCAPTCHA init error:', error)
-            setError('Failed to initialize reCAPTCHA. Please refresh the page.')
-          }
-        }
+        initRecaptcha()
       }, 100)
 
       return () => {
@@ -114,8 +129,12 @@ export default function HostLogin() {
     setLoading(true)
 
     try {
-      const fullPhoneNumber = `${countryCode}${phoneNumber}`
-      const appVerifier = window.recaptchaVerifier
+      const digits = (phoneNumber || '').replace(/[^0-9]/g, '')
+      const fullPhoneNumber = `${countryCode}${digits}`
+      // Ensure a verifier exists (user might have retried after an error)
+      const appVerifier = initRecaptcha()
+      // Manually obtain a reCAPTCHA token to avoid invalid-app-credential
+      try { await appVerifier.verify() } catch (e) { /* invisible will re-verify on submit */ }
       
       const confirmation = await signInWithPhoneNumber(auth, fullPhoneNumber, appVerifier)
       setConfirmationResult(confirmation)
@@ -128,6 +147,8 @@ export default function HostLogin() {
         window.recaptchaVerifier.clear()
         window.recaptchaVerifier = null
       }
+      // Reinitialize so user can retry immediately
+      setTimeout(() => initRecaptcha(), 50)
     } finally {
       setLoading(false)
     }
@@ -143,8 +164,9 @@ export default function HostLogin() {
       const result = await confirmationResult.confirm(verificationCode)
       const idToken = await result.user.getIdToken()
 
-      // Send token to backend
+      // Send token to backend, then refresh auth so UI sees the logged-in session
       await api.post('/auth/phone/verify', { idToken, name: name || 'Host' })
+      await refreshAuth()
       nav('/')
     } catch (err) {
       console.error('Code verification error:', err)

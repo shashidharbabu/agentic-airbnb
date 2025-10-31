@@ -97,8 +97,8 @@ router.post('/', ensureAuth, async (req, res) => {
         `
         INSERT INTO bookings (
           property_id, traveler_id, traveler_name, traveler_email,
-          start_date, end_date, guests, total_price, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+          start_date, end_date, guests, total_price, special_requests, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
         `,
         [
           property_id,
@@ -108,7 +108,8 @@ router.post('/', ensureAuth, async (req, res) => {
           start_date,
           end_date,
           guests,
-          totalPrice
+          totalPrice,
+          special_requests || null
         ]
       );
 
@@ -321,6 +322,51 @@ router.put('/:id/cancel', ensureAuth, async (req, res) => {
     }
   } catch (error) {
     console.error('Cancel booking error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Internal API endpoint for AI Agent (no auth required)
+// This endpoint is specifically for the AI Agent backend to fetch bookings
+router.get('/internal/traveler/:id/upcoming', async (req, res) => {
+  try {
+    const travelerId = Number(req.params.id);
+
+    if (isNaN(travelerId)) {
+      return res.status(400).json({ error: 'Invalid traveler ID' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      const [bookings] = await conn.execute(
+        `
+        SELECT 
+          b.*,
+          p.name AS property_name,
+          p.location AS property_location,
+          p.city,
+          p.state,
+          p.country,
+          p.price_per_night,
+          p.bedrooms,
+          p.bathrooms,
+          p.property_type
+        FROM bookings b
+        LEFT JOIN properties p ON b.property_id = p.id
+        WHERE b.traveler_id = ?
+        AND b.status = 'ACCEPTED'
+        AND b.start_date >= CURDATE()
+        ORDER BY b.start_date ASC
+        `,
+        [travelerId]
+      );
+
+      return res.json({ bookings });
+    } finally {
+      conn.release();
+    }
+  } catch (error) {
+    console.error('Get internal upcoming bookings error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

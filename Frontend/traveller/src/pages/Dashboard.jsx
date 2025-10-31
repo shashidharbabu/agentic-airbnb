@@ -410,7 +410,7 @@ const Dashboard = () => {
       <AIAgentPanel 
         isOpen={isAIAgentOpen}
         onClose={() => setIsAIAgentOpen(false)}
-        bookingId={1} 
+        bookingId={null}
       />
     </div>
   );
