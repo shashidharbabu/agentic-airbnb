@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airbnb-config
+  namespace: airbnb-production
+data:
+  application.properties: |
+    server.port=8080
+    spring.datasource.url=jdbc:postgresql://postgres-service:5432/airbnb
+    spring.kafka.bootstrap-servers=kafka-service:9092
+    spring.kafka.consumer.group-id=airbnb-group
+    logging.level.root=INFO
+    logging.level.com.airbnb=DEBUG
+  app.env: "production"
+  max.connections: "100"
+  cache.ttl: "3600"
+
