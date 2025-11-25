@@ -1,7 +1,10 @@
 const express = require('express');
 const Joi = require('joi');
-const { pool } = require('../db');
+const { ObjectId } = require('mongodb');
+const { getDB } = require('../db-mongodb');
 const { ensureAuth } = require('../middleware/auth');
+const { sendEvent } = require('../config/kafka');
+const TOPICS = require('../config/kafka-topics');
 
 const router = express.Router();
 
@@ -9,104 +12,66 @@ const statusQuerySchema = Joi.object({
   status: Joi.string().valid('PENDING', 'ACCEPTED', 'CANCELLED').default('PENDING')
 });
 
-const BOOKING_SELECT_WITH_TRAVELER = `
-  SELECT
-    b.id,
-    b.property_id,
-    b.traveler_id,
-    b.traveler_name,
-    b.traveler_email,
-    b.start_date,
-    b.end_date,
-    b.guests,
-    b.status,
-    b.total_price,
-    b.special_requests,
-    b.created_at,
-    p.owner_id AS property_owner_id,
-    p.name AS property_name,
-    p.location AS property_location,
-    p.address AS property_address,
-    p.city AS property_city,
-    p.state AS property_state,
-    p.country AS property_country,
-    tu.name AS traveler_account_name,
-    tu.email AS traveler_account_email
-  FROM bookings b
-  JOIN properties p ON p.id = b.property_id
-  LEFT JOIN users tu ON tu.id = b.traveler_id
-`;
+async function fetchBookings(db, options) {
+  const { ownerId, status, id } = options;
+  const bookingsCollection = db.collection('bookings');
+  const propertiesCollection = db.collection('properties');
+  const usersCollection = db.collection('users');
 
-const BOOKING_SELECT_LEGACY = `
-  SELECT
-    b.id,
-    b.property_id,
-    NULL AS traveler_id,
-    b.traveler_name,
-    b.traveler_email,
-    b.start_date,
-    b.end_date,
-    b.guests,
-    b.status,
-    NULL AS total_price,
-    NULL AS special_requests,
-    b.created_at,
-    p.owner_id AS property_owner_id,
-    p.name AS property_name,
-    p.location AS property_location,
-    p.address AS property_address,
-    p.city AS property_city,
-    p.state AS property_state,
-    p.country AS property_country,
-    NULL AS traveler_account_name,
-    NULL AS traveler_account_email
-  FROM bookings b
-  JOIN properties p ON p.id = b.property_id
-`;
-
-let supportsTravelerAccounts = true;
-
-const isSchemaMismatchError = (error) => {
-  if (!error) return false;
-  return error.code === 'ER_BAD_FIELD_ERROR' ||
-    error.code === 'ER_NO_SUCH_TABLE' ||
-    error.errno === 1054 ||
-    error.errno === 1146;
-};
-
-const buildBookingQuery = (base, { ownerId, status, id, lock }) => {
-  const params = { ownerId };
-  const conditions = ['p.owner_id = :ownerId'];
-  if (typeof id === 'number' && !Number.isNaN(id)) {
-    conditions.push('b.id = :id');
-    params.id = id;
+  const matchStage = { 'property.owner_id': new ObjectId(ownerId) };
+  if (id) {
+    matchStage._id = new ObjectId(id);
   }
   if (status) {
-    conditions.push('b.status = :status');
-    params.status = status;
+    matchStage.status = status;
   }
 
-  let query = `${base}\nWHERE ${conditions.join('\n  AND ')}`;
-  if (!id) query += '\nORDER BY b.start_date ASC, b.created_at ASC';
-  if (lock) query += '\nFOR UPDATE';
-  return { query, params };
-};
+  const bookings = await bookingsCollection.aggregate([
+    {
+      $lookup: {
+        from: 'properties',
+        localField: 'property_id',
+        foreignField: '_id',
+        as: 'property'
+      }
+    },
+    { $unwind: '$property' },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'traveler_id',
+        foreignField: '_id',
+        as: 'traveler_account'
+      }
+    },
+    { $unwind: { path: '$traveler_account', preserveNullAndEmptyArrays: true } },
+    { $match: matchStage },
+    { $sort: { start_date: 1, created_at: 1 } }
+  ]).toArray();
 
-async function fetchBookings(conn, options) {
-  const base = supportsTravelerAccounts ? BOOKING_SELECT_WITH_TRAVELER : BOOKING_SELECT_LEGACY;
-  const { query, params } = buildBookingQuery(base, options);
-  try {
-    const [rows] = await conn.execute(query, params);
-    return rows;
-  } catch (error) {
-    if (supportsTravelerAccounts && isSchemaMismatchError(error)) {
-      supportsTravelerAccounts = false;
-      const fallback = buildBookingQuery(BOOKING_SELECT_LEGACY, options);
-      const [rows] = await conn.execute(fallback.query, fallback.params);
-      return rows;
-    }
-    throw error;
-  }
+  return bookings.map(booking => ({
+    id: booking._id.toString(),
+    property_id: booking.property_id ? (typeof booking.property_id === 'object' ? booking.property_id.toString() : booking.property_id) : null,
+    traveler_id: booking.traveler_id ? (typeof booking.traveler_id === 'object' ? booking.traveler_id.toString() : booking.traveler_id) : null,
+    traveler_name: booking.traveler_name,
+    traveler_email: booking.traveler_email,
+    start_date: booking.start_date,
+    end_date: booking.end_date,
+    guests: booking.guests,
+    status: booking.status,
+    total_price: booking.total_price || null,
+    special_requests: booking.special_requests || null,
+    created_at: booking.created_at,
+    property_owner_id: booking.property.owner_id ? (typeof booking.property.owner_id === 'object' ? booking.property.owner_id.toString() : booking.property.owner_id) : null,
+    property_name: booking.property.name,
+    property_location: booking.property.location,
+    property_address: booking.property.address,
+    property_city: booking.property.city,
+    property_state: booking.property.state,
+    property_country: booking.property.country,
+    traveler_account_name: booking.traveler_account?.name || null,
+    traveler_account_email: booking.traveler_account?.email || null
+  }));
 }
 
 const buildLocationLabel = (row) => {
@@ -120,13 +85,13 @@ const buildLocationLabel = (row) => {
 };
 
 const serializeBooking = (row) => ({
-  id: row.id,
+  id: typeof row.id === 'string' ? row.id : row._id?.toString() || row.id?.toString(),
   status: row.status,
   startDate: row.start_date,
   endDate: row.end_date,
   guests: row.guests,
   createdAt: row.created_at,
-  travelerId: row.traveler_id,
+  travelerId: row.traveler_id ? (typeof row.traveler_id === 'object' ? row.traveler_id.toString() : row.traveler_id) : null,
   totalPrice: row.total_price,
   specialRequests: row.special_requests,
   traveler: {
@@ -134,7 +99,7 @@ const serializeBooking = (row) => ({
     email: row.traveler_account_email || row.traveler_email
   },
   property: {
-    id: row.property_id,
+    id: row.property_id ? (typeof row.property_id === 'object' ? row.property_id.toString() : row.property_id) : null,
     name: row.property_name || 'Untitled listing',
     location: buildLocationLabel(row),
     city: row.property_city,
@@ -151,15 +116,10 @@ router.get('/incoming', ensureAuth, async (req, res) => {
     if (error) return res.status(400).json({ error: 'invalid_status' });
 
     const ownerId = req.session.owner.id;
-    const conn = await pool.getConnection();
+    const db = await getDB();
 
-    try {
-      const rows = await fetchBookings(conn, { ownerId, status: value.status });
-
-      return res.json({ bookings: rows.map(serializeBooking) });
-    } finally {
-      conn.release();
-    }
+    const rows = await fetchBookings(db, { ownerId, status: value.status });
+    return res.json({ bookings: rows.map(serializeBooking) });
   } catch (err) {
     console.error('GET /bookings/incoming failed:', err);
     return res.status(500).json({ error: 'internal_error' });
@@ -169,57 +129,60 @@ router.get('/incoming', ensureAuth, async (req, res) => {
 // GET /bookings/property/:propertyId - Get all bookings for a specific property
 router.get('/property/:propertyId', ensureAuth, async (req, res) => {
   try {
-    const propertyId = Number.parseInt(req.params.propertyId, 10);
-    if (Number.isNaN(propertyId)) {
+    let propertyId;
+    try {
+      propertyId = new ObjectId(req.params.propertyId);
+    } catch {
       return res.status(400).json({ error: 'invalid_property_id' });
     }
 
     const ownerId = req.session.owner.id;
-    const conn = await pool.getConnection();
+    const db = await getDB();
+    const propertiesCollection = db.collection('properties');
+    const bookingsCollection = db.collection('bookings');
+    const usersCollection = db.collection('users');
 
-    try {
-      // First check if the property belongs to this owner
-      const [propertyRows] = await conn.execute(
-        'SELECT id, owner_id FROM properties WHERE id = :id',
-        { id: propertyId }
-      );
-
-      if (propertyRows.length === 0) {
-        return res.status(404).json({ error: 'property_not_found' });
-      }
-
-      if (propertyRows[0].owner_id !== ownerId) {
-        return res.status(403).json({ error: 'forbidden' });
-      }
-
-      // Fetch all bookings for this property
-      const base = supportsTravelerAccounts ? BOOKING_SELECT_WITH_TRAVELER : BOOKING_SELECT_LEGACY;
-      const query = `${base}
-WHERE p.id = :propertyId
-  AND p.owner_id = :ownerId
-ORDER BY b.start_date DESC, b.created_at DESC`;
-
-      const [rows] = await conn.execute(query, { propertyId, ownerId });
-
-      const bookings = rows.map(row => ({
-        id: row.id,
-        property_id: row.property_id,
-        traveler_id: row.traveler_id,
-        traveler_name: row.traveler_account_name || row.traveler_name,
-        traveler_email: row.traveler_account_email || row.traveler_email,
-        start_date: row.start_date,
-        end_date: row.end_date,
-        guests: row.guests,
-        status: row.status,
-        total_price: row.total_price || null,
-        special_requests: row.special_requests || null,
-        created_at: row.created_at
-      }));
-
-      return res.json({ bookings });
-    } finally {
-      conn.release();
+    // First check if the property belongs to this owner
+    const property = await propertiesCollection.findOne({ _id: propertyId });
+    if (!property) {
+      return res.status(404).json({ error: 'property_not_found' });
     }
+
+    if (property.owner_id.toString() !== ownerId) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    // Fetch all bookings for this property
+    const bookings = await bookingsCollection.aggregate([
+      { $match: { property_id: propertyId } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'traveler_id',
+          foreignField: '_id',
+          as: 'traveler_account'
+        }
+      },
+      { $unwind: { path: '$traveler_account', preserveNullAndEmptyArrays: true } },
+      { $sort: { start_date: -1, created_at: -1 } }
+    ]).toArray();
+
+    const formattedBookings = bookings.map(booking => ({
+      id: booking._id.toString(),
+      property_id: booking.property_id ? (typeof booking.property_id === 'object' ? booking.property_id.toString() : booking.property_id) : null,
+      traveler_id: booking.traveler_id ? (typeof booking.traveler_id === 'object' ? booking.traveler_id.toString() : booking.traveler_id) : null,
+      traveler_name: booking.traveler_account?.name || booking.traveler_name,
+      traveler_email: booking.traveler_account?.email || booking.traveler_email,
+      start_date: booking.start_date,
+      end_date: booking.end_date,
+      guests: booking.guests,
+      status: booking.status,
+      total_price: booking.total_price || null,
+      special_requests: booking.special_requests || null,
+      created_at: booking.created_at
+    }));
+
+    return res.json({ bookings: formattedBookings });
   } catch (err) {
     console.error(`GET /bookings/property/${req.params.propertyId} failed:`, err);
     return res.status(500).json({ error: 'internal_error' });
@@ -229,76 +192,83 @@ ORDER BY b.start_date DESC, b.created_at DESC`;
 // POST /bookings/:id/accept
 router.post('/:id/accept', ensureAuth, async (req, res) => {
   try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'invalid_id' });
+    let id;
+    try {
+      id = new ObjectId(req.params.id);
+    } catch {
+      return res.status(400).json({ error: 'invalid_id' });
+    }
 
     const ownerId = req.session.owner.id;
-    const conn = await pool.getConnection();
+    const db = await getDB();
+    const bookingsCollection = db.collection('bookings');
 
-    try {
-      await conn.beginTransaction();
+    // Fetch booking to verify ownership and status
+    const rows = await fetchBookings(db, { ownerId, id });
 
-      const rows = await fetchBookings(conn, { ownerId, id, lock: true });
-
-      if (rows.length === 0) {
-        await conn.rollback();
-        return res.status(404).json({ error: 'not_found' });
-      }
-
-      const booking = rows[0];
-      if (booking.property_owner_id !== ownerId) {
-        await conn.rollback();
-        return res.status(403).json({ error: 'forbidden' });
-      }
-
-      if (booking.status === 'CANCELLED') {
-        await conn.rollback();
-        return res.status(422).json({ error: 'already_cancelled' });
-      }
-
-      if (booking.status === 'ACCEPTED') {
-        await conn.commit();
-        return res.json({ booking: serializeBooking(booking) });
-      }
-
-      const [conflicts] = await conn.execute(
-        `SELECT id
-           FROM bookings
-          WHERE property_id = :propertyId
-            AND status = 'ACCEPTED'
-            AND id != :id
-            AND start_date < :endDate
-            AND end_date > :startDate
-          LIMIT 1`,
-        {
-          propertyId: booking.property_id,
-          id,
-          startDate: booking.start_date,
-          endDate: booking.end_date
-        }
-      );
-
-      if (conflicts.length > 0) {
-        await conn.rollback();
-        return res.status(409).json({ error: 'date_conflict' });
-      }
-
-      await conn.execute(
-        'UPDATE bookings SET status = "ACCEPTED" WHERE id = :id',
-        { id }
-      );
-
-      const updatedRows = await fetchBookings(conn, { ownerId, id });
-
-      await conn.commit();
-
-      return res.json({ booking: serializeBooking(updatedRows[0]) });
-    } catch (err) {
-      await conn.rollback();
-      throw err;
-    } finally {
-      conn.release();
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'not_found' });
     }
+
+    const booking = rows[0];
+    if (booking.property_owner_id !== ownerId) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    if (booking.status === 'CANCELLED') {
+      return res.status(422).json({ error: 'already_cancelled' });
+    }
+
+    if (booking.status === 'ACCEPTED') {
+      return res.json({ booking: serializeBooking(booking) });
+    }
+
+    // Check for date conflicts
+    const propertyId = typeof booking.property_id === 'string' ? new ObjectId(booking.property_id) : booking.property_id;
+    const conflicts = await bookingsCollection.countDocuments({
+      property_id: propertyId,
+      status: 'ACCEPTED',
+      _id: { $ne: id },
+      start_date: { $lt: booking.end_date },
+      end_date: { $gt: booking.start_date }
+    });
+
+    if (conflicts > 0) {
+      return res.status(409).json({ error: 'date_conflict' });
+    }
+
+    // Update booking status (without transaction for standalone MongoDB)
+    await bookingsCollection.updateOne(
+      { _id: id },
+      { $set: { status: 'ACCEPTED', updated_at: new Date() } }
+    );
+
+    // Fetch updated booking
+    const updatedRows = await fetchBookings(db, { ownerId, id });
+    const updatedBooking = updatedRows[0];
+
+    // Send Kafka event for booking acceptance
+    try {
+      await sendEvent(TOPICS.BOOKING_ACCEPTED, {
+        type: 'booking-accepted',
+        booking_id: id.toString(),
+        property_id: updatedBooking.property_id,
+        owner_id: ownerId,
+        traveler_id: updatedBooking.traveler_id,
+        traveler_name: updatedBooking.traveler_name,
+        traveler_email: updatedBooking.traveler_email,
+        start_date: updatedBooking.start_date.toISOString ? updatedBooking.start_date.toISOString() : new Date(updatedBooking.start_date).toISOString(),
+        end_date: updatedBooking.end_date.toISOString ? updatedBooking.end_date.toISOString() : new Date(updatedBooking.end_date).toISOString(),
+        guests: updatedBooking.guests,
+        total_price: updatedBooking.total_price,
+        status: 'ACCEPTED'
+      }, id.toString());
+    } catch (kafkaError) {
+      // Log error but don't fail the booking acceptance
+      console.error('Failed to send Kafka event for booking acceptance:', kafkaError);
+    }
+
+    return res.json({ booking: serializeBooking(updatedBooking) });
   } catch (err) {
     console.error(`POST /bookings/${req.params.id}/accept failed:`, err);
     return res.status(500).json({ error: 'internal_error' });
@@ -308,49 +278,66 @@ router.post('/:id/accept', ensureAuth, async (req, res) => {
 // POST /bookings/:id/cancel
 router.post('/:id/cancel', ensureAuth, async (req, res) => {
   try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'invalid_id' });
+    let id;
+    try {
+      id = new ObjectId(req.params.id);
+    } catch {
+      return res.status(400).json({ error: 'invalid_id' });
+    }
 
     const ownerId = req.session.owner.id;
-    const conn = await pool.getConnection();
+    const db = await getDB();
+    const bookingsCollection = db.collection('bookings');
 
-    try {
-      await conn.beginTransaction();
+    // Fetch booking to verify ownership and status
+    const rows = await fetchBookings(db, { ownerId, id });
 
-      const rows = await fetchBookings(conn, { ownerId, id, lock: true });
-
-      if (rows.length === 0) {
-        await conn.rollback();
-        return res.status(404).json({ error: 'not_found' });
-      }
-
-      const booking = rows[0];
-      if (booking.property_owner_id !== ownerId) {
-        await conn.rollback();
-        return res.status(403).json({ error: 'forbidden' });
-      }
-
-      if (booking.status === 'CANCELLED') {
-        await conn.commit();
-        return res.json({ booking: serializeBooking(booking) });
-      }
-
-      await conn.execute(
-        'UPDATE bookings SET status = "CANCELLED" WHERE id = :id',
-        { id }
-      );
-
-      const updatedRows = await fetchBookings(conn, { ownerId, id });
-
-      await conn.commit();
-
-      return res.json({ booking: serializeBooking(updatedRows[0]) });
-    } catch (err) {
-      await conn.rollback();
-      throw err;
-    } finally {
-      conn.release();
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'not_found' });
     }
+
+    const booking = rows[0];
+    if (booking.property_owner_id !== ownerId) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    if (booking.status === 'CANCELLED') {
+      return res.json({ booking: serializeBooking(booking) });
+    }
+
+    // Update booking status (without transaction for standalone MongoDB)
+    await bookingsCollection.updateOne(
+      { _id: id },
+      { $set: { status: 'CANCELLED', updated_at: new Date() } }
+    );
+
+    // Fetch updated booking
+    const updatedRows = await fetchBookings(db, { ownerId, id });
+    const updatedBooking = updatedRows[0];
+
+    // Send Kafka event for booking cancellation
+    try {
+      await sendEvent(TOPICS.BOOKING_CANCELLED, {
+        type: 'booking-cancelled',
+        booking_id: id.toString(),
+        property_id: updatedBooking.property_id,
+        owner_id: ownerId,
+        traveler_id: updatedBooking.traveler_id,
+        traveler_name: updatedBooking.traveler_name,
+        traveler_email: updatedBooking.traveler_email,
+        cancelled_by: 'HOST',
+        start_date: updatedBooking.start_date.toISOString ? updatedBooking.start_date.toISOString() : new Date(updatedBooking.start_date).toISOString(),
+        end_date: updatedBooking.end_date.toISOString ? updatedBooking.end_date.toISOString() : new Date(updatedBooking.end_date).toISOString(),
+        guests: updatedBooking.guests,
+        total_price: updatedBooking.total_price,
+        status: 'CANCELLED'
+      }, id.toString());
+    } catch (kafkaError) {
+      // Log error but don't fail the booking cancellation
+      console.error('Failed to send Kafka event for booking cancellation:', kafkaError);
+    }
+
+    return res.json({ booking: serializeBooking(updatedBooking) });
   } catch (err) {
     console.error(`POST /bookings/${req.params.id}/cancel failed:`, err);
     return res.status(500).json({ error: 'internal_error' });

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/client'
-import { useAuth } from '../context/AuthContext'
+import { useAppDispatch } from '../store/hooks'
+import { checkAuth } from '../store/slices/authSlice'
 import '../styles/ListingDetails.css'
 
 const fontFamily = '"Airbnb Cereal VF", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
@@ -69,7 +70,8 @@ const parseFloatSafe = (value) => {
 export default function ListingDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { refreshAuth } = useAuth()
+  const dispatch = useAppDispatch()
+  const refreshAuth = () => dispatch(checkAuth())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')

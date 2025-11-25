@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect } from 'react'
+import { Provider } from 'react-redux'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { store } from './store/store'
+import { checkAuth } from './store/slices/authSlice'
 import HostLogin from './pages/HostLogin'
 import HostDashboard from './pages/HostDashboard'
 import PropertyForm from './pages/PropertyForm'
@@ -25,8 +28,7 @@ import HostingResources from './pages/HostingResources'
 import GetHelp from './pages/GetHelp'
 import FindCoHost from './pages/FindCoHost'
 import ReferHost from './pages/ReferHost'
-import api from './api/client'
-import { AuthContext, useAuth } from './context/AuthContext'
+import { useAppSelector } from './store/hooks'
 
 const loaderStyle = {
   minHeight: '100vh',
@@ -43,55 +45,27 @@ function FullPageLoader() {
 }
 
 function RequireAuth({ children }) {
-  const { currentUser, bootstrapping } = useAuth()
+  const { currentUser, bootstrapping } = useAppSelector((state) => state.auth)
   if (bootstrapping) return <FullPageLoader />
   if (!currentUser) return <Navigate to="/login" replace />
   return children
 }
 
 function PublicOnly({ children }) {
-  const { currentUser, bootstrapping } = useAuth()
+  const { currentUser, bootstrapping } = useAppSelector((state) => state.auth)
   if (bootstrapping) return <FullPageLoader />
   if (currentUser) return <Navigate to="/" replace />
   return children
 }
 
-export default function App() {
-  const [currentUser, setCurrentUser] = useState(null)
-  const [bootstrapping, setBootstrapping] = useState(true)
-
-  const refreshAuth = useCallback(async () => {
-    try {
-      const { data } = await api.get('/auth/me', { withCredentials: true })
-      setCurrentUser(data?.owner || null)
-      return data?.owner || null
-    } catch (error) {
-      setCurrentUser(null)
-      return null
-    }
-  }, [])
-
+function AppContent() {
+  // Initialize auth check on app load
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      await refreshAuth()
-      if (!cancelled) setBootstrapping(false)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [refreshAuth])
-
-  const authValue = useMemo(() => ({
-    currentUser,
-    setCurrentUser,
-    bootstrapping,
-    refreshAuth
-  }), [currentUser, bootstrapping, refreshAuth])
+    store.dispatch(checkAuth());
+  }, []);
 
   return (
-    <AuthContext.Provider value={authValue}>
-      <Routes>
+    <Routes>
         <Route
           path="/login"
           element={(
@@ -342,6 +316,13 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </AuthContext.Provider>
+  )
+}
+
+export default function App() {
+  return (
+    <Provider store={store}>
+      <AppContent />
+    </Provider>
   )
 }

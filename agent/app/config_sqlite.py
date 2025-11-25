@@ -20,6 +20,9 @@ class Settings:
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
     
+    # External service URLs (for Docker/Kubernetes)
+    TRAVELER_API_URL: str = os.getenv("TRAVELER_API_URL", "http://localhost:5001")
+    
     @property
     def database_url(self) -> str:
         return f"sqlite:///./{self.DB_NAME}"

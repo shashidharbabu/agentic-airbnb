@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import '../styles/Sidebar.css';
-import api from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { useAppDispatch } from '../store/hooks';
+import { logout } from '../store/slices/authSlice';
 
 export default function Sidebar({ onClose }) {
   const navigate = useNavigate();
-  const { refreshAuth } = useAuth();
+  const dispatch = useAppDispatch();
 
   const handleMenuClick = (path) => {
     navigate(path);
@@ -16,11 +16,13 @@ export default function Sidebar({ onClose }) {
 
   const handleLogout = async () => {
     try {
-      await api.post('/auth/logout', null, { withCredentials: true });
+      await dispatch(logout()).unwrap();
+      navigate('/login', { replace: true });
+      onClose();
     } catch (error) {
       console.error('Failed to log out', error);
-    } finally {
-      await refreshAuth();
+      // Even if logout fails, clear local state and redirect
+      localStorage.removeItem('host_user');
       navigate('/login', { replace: true });
       onClose();
     }

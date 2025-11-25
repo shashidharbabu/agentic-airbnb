@@ -1,65 +1,93 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const { pool } = require('../db');
+const { ObjectId } = require('mongodb');
+const { getDB } = require('../db-mongodb');
 const fs = require('fs');
 const path = require('path');
 
-// Load Google OAuth config (from project root)
+// Load Google OAuth config (from project root) - optional
+let oauthConfig = null;
 const oauthConfigPath = path.join(__dirname, '../../../../OAuthConfig.json');
-const oauthConfig = JSON.parse(fs.readFileSync(oauthConfigPath, 'utf8'));
+try {
+  if (fs.existsSync(oauthConfigPath)) {
+    oauthConfig = JSON.parse(fs.readFileSync(oauthConfigPath, 'utf8'));
+  }
+} catch (error) {
+  console.warn('OAuthConfig.json not found or invalid. OAuth will be disabled.');
+}
 
-// Configure Google OAuth Strategy
-passport.use(new GoogleStrategy({
-  clientID: oauthConfig.web.client_id,
-  clientSecret: oauthConfig.web.client_secret,
-  callbackURL: oauthConfig.web.redirect_uris[0],
-  passReqToCallback: true
-},
+// Configure Google OAuth Strategy (only if config exists)
+if (oauthConfig && oauthConfig.web) {
+  passport.use(new GoogleStrategy({
+    clientID: oauthConfig.web.client_id,
+    clientSecret: oauthConfig.web.client_secret,
+    callbackURL: oauthConfig.web.redirect_uris[0],
+    passReqToCallback: true
+  },
 async (req, accessToken, refreshToken, profile, done) => {
   try {
     const googleId = profile.id;
     const email = profile.emails[0].value;
     const name = profile.displayName;
 
-    const conn = await pool.getConnection();
-    try {
-      // Check if user exists by google_id or email
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, google_id, auth_provider FROM owners WHERE google_id = ? OR email = ?',
-        [googleId, email]
-      );
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
 
-      let owner;
-      if (rows.length > 0) {
-        // User exists - update google_id if needed
-        owner = rows[0];
-        if (!owner.google_id) {
-          await conn.execute(
-            'UPDATE owners SET google_id = ?, auth_provider = ? WHERE id = ?',
-            [googleId, 'google', owner.id]
-          );
-          owner.google_id = googleId;
-          owner.auth_provider = 'google';
-        }
-      } else {
-        // Create new user
-        const [result] = await conn.execute(
-          'INSERT INTO owners (email, google_id, name, auth_provider) VALUES (?, ?, ?, ?)',
-          [email, googleId, name, 'google']
+    // Check if user exists by google_id or email
+    let ownerDoc = await ownersCollection.findOne({
+      $or: [
+        { google_id: googleId },
+        { email: email }
+      ]
+    });
+
+    let owner;
+    if (ownerDoc) {
+      // User exists - update google_id if needed
+      if (!ownerDoc.google_id) {
+        await ownersCollection.updateOne(
+          { _id: ownerDoc._id },
+          { $set: { google_id: googleId, auth_provider: 'google', updated_at: new Date() } }
         );
-        owner = { id: result.insertId, email, name, google_id: googleId, auth_provider: 'google' };
+        ownerDoc.google_id = googleId;
+        ownerDoc.auth_provider = 'google';
       }
-
-      return done(null, owner);
-    } finally {
-      conn.release();
+      owner = {
+        id: ownerDoc._id.toString(),
+        email: ownerDoc.email,
+        name: ownerDoc.name,
+        google_id: ownerDoc.google_id,
+        auth_provider: ownerDoc.auth_provider
+      };
+    } else {
+      // Create new user
+      const result = await ownersCollection.insertOne({
+        email,
+        google_id: googleId,
+        name,
+        auth_provider: 'google',
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+      owner = {
+        id: result.insertedId.toString(),
+        email,
+        name,
+        google_id: googleId,
+        auth_provider: 'google'
+      };
     }
+
+    return done(null, owner);
   } catch (error) {
     console.error('Google OAuth error:', error);
     return done(error, null);
   }
 }
-));
+  ));
+} else {
+  console.warn('Google OAuth not configured. OAuth endpoints will not work.');
+}
 
 // Serialize user to session
 passport.serializeUser((user, done) => {
@@ -69,19 +97,20 @@ passport.serializeUser((user, done) => {
 // Deserialize user from session
 passport.deserializeUser(async (id, done) => {
   try {
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, google_id, auth_provider FROM owners WHERE id = ?',
-        [id]
-      );
-      if (rows.length > 0) {
-        done(null, rows[0]);
-      } else {
-        done(new Error('User not found'), null);
-      }
-    } finally {
-      conn.release();
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
+
+    const ownerDoc = await ownersCollection.findOne({ _id: new ObjectId(id) });
+    if (ownerDoc) {
+      done(null, {
+        id: ownerDoc._id.toString(),
+        email: ownerDoc.email,
+        name: ownerDoc.name,
+        google_id: ownerDoc.google_id,
+        auth_provider: ownerDoc.auth_provider
+      });
+    } else {
+      done(new Error('User not found'), null);
     }
   } catch (error) {
     done(error, null);

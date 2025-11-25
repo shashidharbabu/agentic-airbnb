@@ -23,7 +23,16 @@ const testConnection = async () => {
   } catch (err) {
     console.error('Database connection failed:', err.message);
     console.error('Make sure MySQL is running and your .env credentials are correct.');
-    process.exit(1);
+    // Don't exit in containerized/Docker environments - allow service to start and retry
+    if (process.env.DOCKER_ENV === 'true' || process.env.KUBERNETES_SERVICE_HOST) {
+      console.warn('Continuing without database connection (containerized mode - will retry on first request)');
+    } else if (process.env.NODE_ENV === 'development') {
+      console.warn('Continuing without database connection (development mode)');
+    } else {
+      // In production, exit if database is critical
+      console.error('Database connection is required. Exiting...');
+      process.exit(1);
+    }
   }
 };
 

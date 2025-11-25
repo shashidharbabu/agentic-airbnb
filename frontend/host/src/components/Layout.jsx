@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/LayoutHeader.css';
 import Sidebar from './Sidebar';
-import { useAuth } from '../context/AuthContext';
+import { useAppSelector } from '../store/hooks';
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser } = useAppSelector((state) => state.auth);
   const userName = currentUser?.name || currentUser?.email || 'Host';
 
   const menuIcons = {
@@ -79,7 +79,7 @@ export default function Layout({ children }) {
           {/* Right Side - Profile & Actions */}
           <div className="header-right">
             {/* Switch to Traveling */}
-            <button className="switch-traveling" onClick={() => window.location.href = 'http://localhost:5173/login'}>
+            <button className="switch-traveling" onClick={() => window.location.href = 'http://abe6856d8cc9d449eb0e420eef657eb2-612137670.us-east-1.elb.amazonaws.com/login'}>
               Switch to traveling
             </button>
 

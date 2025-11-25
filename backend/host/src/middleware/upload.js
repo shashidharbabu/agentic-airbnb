@@ -1,7 +1,9 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuid } = require('uuid');
+const crypto = require('crypto');
+// Use Node.js built-in crypto.randomUUID() (available in Node 18+)
+const uuid = () => crypto.randomUUID();
 
 // Property photos storage
 const propertyPhotosRoot = path.join(__dirname, '..', '..', 'uploads', 'property-photos');

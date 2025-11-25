@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
-const { pool } = require('../db');
+const { ObjectId } = require('mongodb');
+const { getDB } = require('../db-mongodb');
 const { ensureAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -22,17 +23,30 @@ const updateSchema = Joi.object({
 router.get('/me', ensureAuth, async (req, res) => {
   try {
     const id = req.session.owner.id;
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, location, phone, about, avatar_url, street, unit, city, state, zip, country, created_at FROM owners WHERE id = :id',
-        { id }
-      );
-      if (rows.length === 0) return res.status(404).json({ error: 'not_found' });
-      return res.json({ owner: rows[0] });
-    } finally {
-      conn.release();
-    }
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
+
+    const owner = await ownersCollection.findOne({ _id: new ObjectId(id) });
+    if (!owner) return res.status(404).json({ error: 'not_found' });
+
+    const formattedOwner = {
+      id: owner._id.toString(),
+      email: owner.email,
+      name: owner.name,
+      location: owner.location,
+      phone: owner.phone,
+      about: owner.about,
+      avatar_url: owner.avatar_url,
+      street: owner.street,
+      unit: owner.unit,
+      city: owner.city,
+      state: owner.state,
+      zip: owner.zip,
+      country: owner.country,
+      created_at: owner.created_at
+    };
+
+    return res.json({ owner: formattedOwner });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });
@@ -52,19 +66,35 @@ router.put('/me', ensureAuth, async (req, res) => {
     }
     if (Object.keys(updates).length === 0) return res.json({ ok: true });
 
-    const setClauses = Object.keys(updates).map((k) => `${k} = :${k}`).join(', ');
+    updates.updated_at = new Date();
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.execute(`UPDATE owners SET ${setClauses} WHERE id = :id`, { ...updates, id });
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, location, phone, about, avatar_url, street, unit, city, state, zip, country, created_at FROM owners WHERE id = :id',
-        { id }
-      );
-      return res.json({ owner: rows[0] });
-    } finally {
-      conn.release();
-    }
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
+
+    await ownersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updates }
+    );
+
+    const owner = await ownersCollection.findOne({ _id: new ObjectId(id) });
+    const formattedOwner = {
+      id: owner._id.toString(),
+      email: owner.email,
+      name: owner.name,
+      location: owner.location,
+      phone: owner.phone,
+      about: owner.about,
+      avatar_url: owner.avatar_url,
+      street: owner.street,
+      unit: owner.unit,
+      city: owner.city,
+      state: owner.state,
+      zip: owner.zip,
+      country: owner.country,
+      created_at: owner.created_at
+    };
+
+    return res.json({ owner: formattedOwner });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });

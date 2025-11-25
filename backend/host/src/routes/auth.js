@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const Joi = require('joi');
-const { pool } = require('../db');
+const { ObjectId } = require('mongodb');
+const { getDB } = require('../db-mongodb');
 const passport = require('../middleware/passport');
 const admin = require('../middleware/firebase');
 const { ensureAuth } = require('../middleware/auth');
@@ -34,73 +35,176 @@ const updateProfileSchema = Joi.object({
 router.post('/signup', async (req, res) => {
   try {
     const { error, value } = signupSchema.validate(req.body);
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      console.error('Signup validation error:', error.message);
+      return res.status(400).json({ error: error.message });
+    }
 
     const email = value.email.toLowerCase().trim();
-  const name = value.name.trim();
-  const phone = value.phone.trim();
-  const location = value.location.trim();
-    const passwordHash = await bcrypt.hash(value.password, 10);
+    const name = value.name.trim();
+    const phone = value.phone.trim();
+    const location = value.location.trim();
+    console.log('Signup attempt for email:', email);
 
-    const conn = await pool.getConnection();
+    let db;
     try {
-      const [rows] = await conn.execute('SELECT id FROM owners WHERE email = :email', { email });
-      if (rows.length > 0) return res.status(409).json({ error: 'email_in_use' });
-
-      const [phoneRows] = await conn.execute('SELECT id FROM owners WHERE phone = :phone', { phone });
-      if (phoneRows.length > 0) return res.status(409).json({ error: 'phone_in_use' });
-
-      const [result] = await conn.execute(
-        'INSERT INTO owners (email, password_hash, name, phone, location) VALUES (:email, :password_hash, :name, :phone, :location)',
-        { email, password_hash: passwordHash, name, phone, location }
-      );
-
-  const owner = { id: result.insertId, email, name, phone, location, bio: '' };
-      req.session.owner = owner;
-      return res.json({ owner });
-    } finally {
-      conn.release();
+      db = await getDB();
+    } catch (dbError) {
+      console.error('Database connection error during signup:', dbError);
+      return res.status(500).json({ error: 'database_connection_failed' });
     }
+
+    const passwordHash = await bcrypt.hash(value.password, 10);
+    const ownersCollection = db.collection('owners');
+
+    // Check if email exists
+    const existingEmail = await ownersCollection.findOne({ email });
+    if (existingEmail) {
+      console.log('Signup failed: Email already exists:', email);
+      return res.status(409).json({ error: 'email_in_use' });
+    }
+
+    // Check if phone exists
+    const existingPhone = await ownersCollection.findOne({ phone });
+    if (existingPhone) {
+      console.log('Signup failed: Phone already exists:', phone);
+      return res.status(409).json({ error: 'phone_in_use' });
+    }
+
+    // Insert new owner
+    const result = await ownersCollection.insertOne({
+      email,
+      password_hash: passwordHash,
+      name,
+      phone,
+      location,
+      about: '',
+      avatar_url: null,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    console.log('User created successfully, ID:', result.insertedId);
+
+    const owner = {
+      id: result.insertedId.toString(),
+      email,
+      name,
+      phone,
+      location,
+      bio: ''
+    };
+    
+    console.log('Setting session for new user:', owner.email);
+    
+    // Set session and explicitly save
+    req.session.owner = owner;
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error during signup:', err);
+        return res.status(500).json({ error: 'session_save_failed', details: err.message });
+      }
+      console.log('Session saved successfully for new user:', owner.email);
+      return res.json({ owner });
+    });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: 'internal_error' });
+    console.error('Signup error:', e);
+    return res.status(500).json({ error: 'internal_error', details: e.message });
   }
 });
 
 router.post('/login', async (req, res) => {
   try {
     const { error, value } = loginSchema.validate(req.body);
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      console.error('Login validation error:', error.message);
+      return res.status(400).json({ error: error.message });
+    }
 
     const email = value.email.toLowerCase().trim();
+    console.log('Login attempt for email:', email);
 
-    const conn = await pool.getConnection();
+    let db;
     try {
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, phone, location, password_hash, about FROM owners WHERE email = :email',
-        { email }
-      );
-      if (rows.length === 0) return res.status(401).json({ error: 'invalid_credentials' });
-      const row = rows[0];
-      const ok = await bcrypt.compare(value.password, row.password_hash);
-      if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
-
-      const owner = {
-        id: row.id,
-        email: row.email,
-        name: row.name,
-        phone: row.phone,
-        location: row.location,
-        bio: row.about || ''
-      };
-      req.session.owner = owner;
-      return res.json({ owner });
-    } finally {
-      conn.release();
+      db = await getDB();
+    } catch (dbError) {
+      console.error('Database connection error:', dbError);
+      return res.status(500).json({ error: 'database_connection_failed' });
     }
+
+    const ownersCollection = db.collection('owners');
+
+    const ownerDoc = await ownersCollection.findOne({ email });
+    if (!ownerDoc) {
+      console.log('Login failed: User not found for email:', email);
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+    
+    console.log('Owner found in MongoDB:');
+    console.log('  _id:', ownerDoc._id.toString());
+    console.log('  email:', ownerDoc.email);
+    console.log('  name:', ownerDoc.name);
+
+    if (!ownerDoc.password_hash) {
+      console.log('Login failed: No password hash for user:', email);
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    const ok = await bcrypt.compare(value.password, ownerDoc.password_hash);
+    if (!ok) {
+      console.log('Login failed: Invalid password for email:', email);
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    const owner = {
+      id: ownerDoc._id.toString(),
+      email: ownerDoc.email,
+      name: ownerDoc.name,
+      phone: ownerDoc.phone || '',
+      location: ownerDoc.location || '',
+      bio: ownerDoc.about || ''
+    };
+    
+    console.log('Login successful for user:', owner.email);
+    console.log('Session ID before:', req.sessionID);
+    console.log('Session store:', req.sessionStore ? 'exists' : 'MISSING');
+    
+    // Regenerate session to ensure new session ID and proper cookie
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Session regenerate error:', err);
+        return res.status(500).json({ error: 'session_regenerate_failed', details: err.message });
+      }
+      
+      console.log('Session regenerated, new ID:', req.sessionID);
+      
+      // Set session data
+      req.session.owner = owner;
+      
+      // Save session
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.status(500).json({ error: 'session_save_failed', details: err.message });
+        }
+        
+        console.log('✅ Session saved successfully');
+        console.log('Final session ID:', req.sessionID);
+        console.log('Cookie name:', SESSION_COOKIE_NAME);
+        
+        // Verify session was saved
+        if (req.session.owner && req.session.owner.email === owner.email) {
+          console.log('✅ Session data verified in memory');
+        } else {
+          console.error('❌ Session data NOT in memory!');
+        }
+        
+        return res.json({ owner });
+      });
+    });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: 'internal_error' });
+    console.error('Login error:', e);
+    return res.status(500).json({ error: 'internal_error', details: e.message });
   }
 });
 
@@ -128,31 +232,25 @@ router.get('/me', ensureAuth, async (req, res) => {
     const ownerId = req.session.owner?.id;
     if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
 
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, phone, location, about, avatar_url FROM owners WHERE id = ?',
-        [ownerId]
-      );
-      
-      if (rows.length === 0) {
-        return res.status(404).json({ error: 'owner_not_found' });
-      }
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
 
-      const owner = {
-        id: rows[0].id,
-        email: rows[0].email,
-        name: rows[0].name,
-        phone: rows[0].phone,
-        location: rows[0].location,
-        bio: rows[0].about || '',
-        avatar_url: rows[0].avatar_url || null
-      };
-
-      return res.json({ owner });
-    } finally {
-      conn.release();
+    const ownerDoc = await ownersCollection.findOne({ _id: new ObjectId(ownerId) });
+    if (!ownerDoc) {
+      return res.status(404).json({ error: 'owner_not_found' });
     }
+
+    const owner = {
+      id: ownerDoc._id.toString(),
+      email: ownerDoc.email,
+      name: ownerDoc.name,
+      phone: ownerDoc.phone,
+      location: ownerDoc.location,
+      bio: ownerDoc.about || '',
+      avatar_url: ownerDoc.avatar_url || null
+    };
+
+    return res.json({ owner });
   } catch (e) {
     console.error('Get /me error:', e);
     return res.status(500).json({ error: 'internal_error' });
@@ -167,66 +265,62 @@ router.put('/profile', ensureAuth, async (req, res) => {
     const ownerId = req.session.owner?.id;
     if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
 
-  const name = value.name.trim();
-  const email = typeof value.email === 'string' && value.email.trim().length > 0 ? value.email.trim().toLowerCase() : null;
-  const phone = value.phone.trim();
-  const location = value.location.trim();
-  const bio = typeof value.bio === 'string' ? value.bio.trim() : '';
+    const name = value.name.trim();
+    const email = typeof value.email === 'string' && value.email.trim().length > 0 ? value.email.trim().toLowerCase() : null;
+    const phone = value.phone.trim();
+    const location = value.location.trim();
+    const bio = typeof value.bio === 'string' ? value.bio.trim() : '';
 
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.execute(
-        'SELECT id FROM owners WHERE phone = :phone AND id != :id',
-        { phone, id: ownerId }
-      );
-      if (rows.length > 0) {
-        return res.status(409).json({ error: 'phone_in_use' });
-      }
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
+    const ownerObjectId = new ObjectId(ownerId);
 
-      // If email provided, ensure unique among other owners
-      if (email) {
-        const [emailRows] = await conn.execute(
-          'SELECT id FROM owners WHERE email = :email AND id != :id',
-          { email, id: ownerId }
-        );
-        if (emailRows.length > 0) {
-          return res.status(409).json({ error: 'email_in_use' });
-        }
-      }
-
-      // Build dynamic update to include email if provided (or set NULL if explicitly empty string)
-      const updateParts = ['name = :name', 'phone = :phone', 'location = :location', 'about = :bio'];
-      const params = { name, phone, location, bio, id: ownerId };
-      if (email !== null) {
-        updateParts.push('email = :email');
-        params.email = email;
-      }
-      await conn.execute(
-        `UPDATE owners SET ${updateParts.join(', ')} WHERE id = :id`,
-        params
-      );
-
-      // Fetch updated owner with avatar_url
-      const [updatedRows] = await conn.execute(
-        'SELECT id, email, name, phone, location, about, avatar_url FROM owners WHERE id = ?',
-        [ownerId]
-      );
-
-      const updatedOwner = {
-        id: updatedRows[0].id,
-        email: updatedRows[0].email,
-        name,
-        phone,
-        location,
-        bio,
-        avatar_url: updatedRows[0].avatar_url || null
-      };
-
-      req.session.owner = updatedOwner;
-      return res.json({ owner: updatedOwner });
-    } finally {
-      conn.release();
+    // Check if phone is in use by another owner
+    const existingPhone = await ownersCollection.findOne({ phone, _id: { $ne: ownerObjectId } });
+    if (existingPhone) {
+      return res.status(409).json({ error: 'phone_in_use' });
     }
+
+    // If email provided, ensure unique among other owners
+    if (email) {
+      const existingEmail = await ownersCollection.findOne({ email, _id: { $ne: ownerObjectId } });
+      if (existingEmail) {
+        return res.status(409).json({ error: 'email_in_use' });
+      }
+    }
+
+    // Build update object
+    const updateData = {
+      name,
+      phone,
+      location,
+      about: bio,
+      updated_at: new Date()
+    };
+    if (email !== null) {
+      updateData.email = email;
+    }
+
+    await ownersCollection.updateOne(
+      { _id: ownerObjectId },
+      { $set: updateData }
+    );
+
+    // Fetch updated owner
+    const updatedOwnerDoc = await ownersCollection.findOne({ _id: ownerObjectId });
+
+    const updatedOwner = {
+      id: updatedOwnerDoc._id.toString(),
+      email: updatedOwnerDoc.email,
+      name,
+      phone,
+      location,
+      bio,
+      avatar_url: updatedOwnerDoc.avatar_url || null
+    };
+
+    req.session.owner = updatedOwner;
+    return res.json({ owner: updatedOwner });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });
@@ -245,25 +339,23 @@ router.post('/profile/picture', ensureAuth, uploadProfilePicture.single('avatar'
 
     const avatarUrl = `/uploads/profile-pictures/${req.file.filename}`;
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.execute(
-        'UPDATE owners SET avatar_url = ? WHERE id = ?',
-        [avatarUrl, ownerId]
-      );
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
 
-      // Update session
-      if (req.session.owner) {
-        req.session.owner.avatar_url = avatarUrl;
-      }
+    await ownersCollection.updateOne(
+      { _id: new ObjectId(ownerId) },
+      { $set: { avatar_url: avatarUrl, updated_at: new Date() } }
+    );
 
-      return res.json({ 
-        message: 'Profile picture uploaded successfully',
-        avatar_url: avatarUrl
-      });
-    } finally {
-      conn.release();
+    // Update session
+    if (req.session.owner) {
+      req.session.owner.avatar_url = avatarUrl;
     }
+
+    return res.json({ 
+      message: 'Profile picture uploaded successfully',
+      avatar_url: avatarUrl
+    });
   } catch (e) {
     console.error('Upload profile picture error:', e);
     return res.status(500).json({ error: 'internal_error' });
@@ -276,22 +368,20 @@ router.delete('/profile/picture', ensureAuth, async (req, res) => {
     const ownerId = req.session.owner?.id;
     if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.execute(
-        'UPDATE owners SET avatar_url = NULL WHERE id = ?',
-        [ownerId]
-      );
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
 
-      // Update session
-      if (req.session.owner) {
-        req.session.owner.avatar_url = null;
-      }
+    await ownersCollection.updateOne(
+      { _id: new ObjectId(ownerId) },
+      { $set: { avatar_url: null, updated_at: new Date() } }
+    );
 
-      return res.json({ message: 'Profile picture deleted successfully' });
-    } finally {
-      conn.release();
+    // Update session
+    if (req.session.owner) {
+      req.session.owner.avatar_url = null;
     }
+
+    return res.json({ message: 'Profile picture deleted successfully' });
   } catch (e) {
     console.error('Delete profile picture error:', e);
     return res.status(500).json({ error: 'internal_error' });
@@ -316,15 +406,26 @@ router.get('/google/callback',
   }),
   (req, res) => {
     // Store user in session for compatibility with existing code
-    req.session.owner = {
+    const owner = {
       id: req.user.id,
       email: req.user.email,
-      name: req.user.name
+      name: req.user.name,
+      phone: req.user.phone || '',
+      location: req.user.location || '',
+      bio: req.user.bio || ''
     };
     
-    // Redirect to frontend dashboard
-    const redirectUrl = process.env.WEB_ORIGIN || 'http://localhost:5174';
-    res.redirect(`${redirectUrl}/dashboard`);
+    req.session.owner = owner;
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        const redirectUrl = process.env.WEB_ORIGIN || 'http://localhost:5174';
+        return res.redirect(`${redirectUrl}/login?error=session_error`);
+      }
+      // Redirect to frontend dashboard
+      const redirectUrl = process.env.WEB_ORIGIN || 'http://localhost:5174';
+      res.redirect(`${redirectUrl}/dashboard`);
+    });
   }
 );
 
@@ -346,6 +447,9 @@ router.post('/phone/verify', async (req, res) => {
     // Verify the Firebase ID token
     let decodedToken;
     try {
+      if (!admin.isInitialized) {
+        return res.status(503).json({ error: 'Firebase authentication is not configured' });
+      }
       decodedToken = await admin.auth().verifyIdToken(idToken);
     } catch (err) {
       console.error('Firebase token verification failed:', err);
@@ -359,55 +463,66 @@ router.post('/phone/verify', async (req, res) => {
       return res.status(400).json({ error: 'phone_number_missing' });
     }
 
-    const conn = await pool.getConnection();
-    try {
-      // Check if user exists by firebase_uid or phone
-      const [rows] = await conn.execute(
-        'SELECT id, email, name, phone, firebase_uid, auth_provider FROM owners WHERE firebase_uid = ? OR phone = ?',
-        [firebaseUid, phoneNumber]
-      );
+    const db = await getDB();
+    const ownersCollection = db.collection('owners');
 
-      let owner;
-      if (rows.length > 0) {
-        // User exists - update firebase_uid if needed
-        owner = rows[0];
-        if (!owner.firebase_uid) {
-          await conn.execute(
-            'UPDATE owners SET firebase_uid = ?, auth_provider = ?, phone = ? WHERE id = ?',
-            [firebaseUid, 'phone', phoneNumber, owner.id]
-          );
-          owner.firebase_uid = firebaseUid;
-          owner.auth_provider = 'phone';
-          owner.phone = phoneNumber;
-        }
-      } else {
-        // Create new user
-        const userName = name || 'Host';
-        const [result] = await conn.execute(
-          'INSERT INTO owners (firebase_uid, phone, name, auth_provider) VALUES (?, ?, ?, ?)',
-          [firebaseUid, phoneNumber, userName, 'phone']
+    // Check if user exists by firebase_uid or phone
+    let ownerDoc = await ownersCollection.findOne({
+      $or: [
+        { firebase_uid: firebaseUid },
+        { phone: phoneNumber }
+      ]
+    });
+
+    if (ownerDoc) {
+      // User exists - update firebase_uid if needed
+      if (!ownerDoc.firebase_uid) {
+        await ownersCollection.updateOne(
+          { _id: ownerDoc._id },
+          { $set: { firebase_uid: firebaseUid, auth_provider: 'phone', phone: phoneNumber, updated_at: new Date() } }
         );
-        owner = { 
-          id: result.insertId, 
-          phone: phoneNumber, 
-          name: userName, 
-          firebase_uid: firebaseUid, 
-          auth_provider: 'phone' 
-        };
+        ownerDoc.firebase_uid = firebaseUid;
+        ownerDoc.auth_provider = 'phone';
+        ownerDoc.phone = phoneNumber;
       }
-
-      // Store user in session
-      req.session.owner = {
-        id: owner.id,
-        email: owner.email || null,
-        name: owner.name,
-        phone: owner.phone
+    } else {
+      // Create new user
+      const userName = name || 'Host';
+      const result = await ownersCollection.insertOne({
+        firebase_uid: firebaseUid,
+        phone: phoneNumber,
+        name: userName,
+        auth_provider: 'phone',
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+      ownerDoc = {
+        _id: result.insertedId,
+        phone: phoneNumber,
+        name: userName,
+        firebase_uid: firebaseUid,
+        auth_provider: 'phone'
       };
-
-      return res.json({ owner: req.session.owner });
-    } finally {
-      conn.release();
     }
+
+    // Store user in session
+    const owner = {
+      id: ownerDoc._id.toString(),
+      email: ownerDoc.email || null,
+      name: ownerDoc.name,
+      phone: ownerDoc.phone,
+      location: ownerDoc.location || '',
+      bio: ownerDoc.about || ''
+    };
+    
+    req.session.owner = owner;
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'internal_error' });
+      }
+      return res.json({ owner });
+    });
   } catch (e) {
     console.error('Phone auth error:', e);
     return res.status(500).json({ error: 'internal_error' });

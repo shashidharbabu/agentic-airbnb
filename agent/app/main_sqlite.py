@@ -42,7 +42,7 @@ async def fetch_traveller_upcoming_bookings(traveller_id: int) -> Optional[List[
     Returns upcoming bookings or None if no bookings found.
     """
     try:
-        traveller_api_url = "http://localhost:5001"
+        traveller_api_url = settings.TRAVELER_API_URL
         
         async with httpx.AsyncClient() as client:
             # Use the new internal endpoint that doesn't require authentication

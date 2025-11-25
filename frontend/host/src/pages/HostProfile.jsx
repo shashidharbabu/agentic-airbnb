@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
-import { useAuth } from '../context/AuthContext'
+import { useAppSelector, useAppDispatch } from '../store/hooks'
+import { checkAuth } from '../store/slices/authSlice'
 
 const fontFamily = '"Airbnb Cereal VF", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
 
@@ -13,7 +14,9 @@ const infoRowStyle = {
 }
 
 export default function HostProfile() {
-  const { currentUser, refreshAuth } = useAuth()
+  const dispatch = useAppDispatch()
+  const { currentUser } = useAppSelector((state) => state.auth)
+  const refreshAuth = () => dispatch(checkAuth())
   const [form, setForm] = useState({
     name: '',
     email: '',

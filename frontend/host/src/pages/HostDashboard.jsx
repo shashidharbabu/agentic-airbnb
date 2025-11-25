@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { fetchMyProperties } from '../store/slices/propertiesSlice'
+import { fetchIncomingBookings, acceptBooking, cancelBooking } from '../store/slices/bookingsSlice'
 import api from '../api/client'
 import '../styles/Listings.css'
 import { currencyFormatter, transformProperty as transformListingProperty } from '../utils/listings'
@@ -28,10 +31,13 @@ const getTravelerInitial = (name, email) => {
 
 export default function HostDashboard() {
   const nav = useNavigate()
-  const [owner, setOwner] = useState(null)
-  const [properties, setProperties] = useState([])
-  const [pending, setPending] = useState([])
-  const [loading, setLoading] = useState(true)
+  const dispatch = useAppDispatch()
+  const { currentUser: owner } = useAppSelector((state) => state.auth)
+  const { properties, loading: propertiesLoading } = useAppSelector((state) => state.properties)
+  const { incomingBookings, loading: bookingsLoading } = useAppSelector((state) => state.bookings)
+  
+  const loading = propertiesLoading || bookingsLoading
+  const pending = incomingBookings.filter(b => b.status === 'PENDING')
 
   const apiBase = useMemo(() => {
     const baseValue = api.defaults.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')
@@ -39,32 +45,24 @@ export default function HostDashboard() {
   }, [])
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true)
-        const me = await api.get('/auth/me')
-        if (!me.data.owner) return nav('/login')
-        setOwner(me.data.owner)
-        
-        const [propsRes, pendRes] = await Promise.all([
-          api.get('/properties/mine'),
-          api.get('/bookings/incoming', { params: { status: 'PENDING' } })
-        ])
-        
-        setProperties(propsRes.data.properties || [])
-        setPending(pendRes.data.bookings || [])
-      } catch {
-        nav('/login')
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+    if (!owner) {
+      nav('/login')
+      return
+    }
+    
+    dispatch(fetchMyProperties())
+    dispatch(fetchIncomingBookings({ status: 'PENDING' }))
+  }, [owner, nav, dispatch])
 
   const handleBookingAction = async (bookingId, action) => {
     try {
-      await api.post(`/bookings/${bookingId}/${action}`)
-      setPending(p => p.filter(x => x.id !== bookingId))
+      if (action === 'accept') {
+        await dispatch(acceptBooking(bookingId))
+      } else if (action === 'cancel') {
+        await dispatch(cancelBooking(bookingId))
+      }
+      // Refresh bookings
+      dispatch(fetchIncomingBookings({ status: 'PENDING' }))
     } catch (error) {
       console.error('Error updating booking:', error)
     }
@@ -660,7 +658,7 @@ export default function HostDashboard() {
         </aside>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }

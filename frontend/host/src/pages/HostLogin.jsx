@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import api from '../api/client'
 import { useNavigate, Link } from 'react-router-dom'
 import { auth, RecaptchaVerifier, signInWithPhoneNumber } from '../firebase'
-import { useAuth } from '../context/AuthContext'
+import { useAppDispatch } from '../store/hooks'
+import { login, signup, checkAuth } from '../store/slices/authSlice'
 
 export default function HostLogin() {
   const nav = useNavigate()
-  const { refreshAuth } = useAuth()
+  const dispatch = useAppDispatch()
   const [view, setView] = useState('main') // 'main', 'email', 'signup', 'phone', 'verify'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -23,18 +23,25 @@ export default function HostLogin() {
   async function handleEmailLogin(e) {
     e.preventDefault()
     setError('')
+    setLoading(true)
     try {
-      await api.post('/auth/login', { email, password })
-      await refreshAuth()
-      nav('/')
+      const result = await dispatch(login({ email, password }))
+      if (login.fulfilled.match(result)) {
+        nav('/')
+      } else {
+        setError(result.payload || 'Invalid email or password')
+      }
     } catch (err) {
-      setError(err?.response?.data?.error || 'Invalid email or password')
+      setError('Invalid email or password')
+    } finally {
+      setLoading(false)
     }
   }
 
   async function handleSignup(e) {
     e.preventDefault()
     setError('')
+    setLoading(true)
     try {
       const normalizedEmail = email.trim()
       const payload = {
@@ -45,19 +52,27 @@ export default function HostLogin() {
         location: signupLocation.trim()
       }
 
-      await api.post('/auth/signup', payload)
-      await api.post('/auth/login', { email: normalizedEmail, password })
-      await refreshAuth()
-      nav('/')
-    } catch (err) {
-      const errorCode = err?.response?.data?.error
-      if (errorCode === 'email_in_use') {
-        setError('That email is already registered. Try logging in instead.')
-      } else if (errorCode === 'phone_in_use') {
-        setError('That phone number is already connected to another account.')
+      const signupResult = await dispatch(signup(payload))
+      if (signup.fulfilled.match(signupResult)) {
+        // Auto-login after signup
+        const loginResult = await dispatch(login({ email: normalizedEmail, password }))
+        if (login.fulfilled.match(loginResult)) {
+          nav('/')
+        }
       } else {
-        setError(errorCode || 'Error creating account')
+        const errorCode = signupResult.payload
+        if (errorCode === 'email_in_use') {
+          setError('That email is already registered. Try logging in instead.')
+        } else if (errorCode === 'phone_in_use') {
+          setError('That phone number is already connected to another account.')
+        } else {
+          setError(errorCode || 'Error creating account')
+        }
       }
+    } catch (err) {
+      setError('Error creating account')
+    } finally {
+      setLoading(false)
     }
   }
 

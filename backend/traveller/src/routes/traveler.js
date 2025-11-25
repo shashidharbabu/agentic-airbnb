@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
-const { pool } = require('../config/database');
+const { ObjectId } = require('mongodb');
+const { getDB } = require('../config/database-mongodb');
 const { ensureAuth } = require('../middleware/auth');
 const { uploadSingle } = require('../middleware/upload');
 
@@ -26,34 +27,32 @@ router.get('/profile', ensureAuth, async (req, res) => {
     console.log('Profile request - Traveler:', req.session.traveler);
     const travelerId = req.session.traveler.id;
 
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.execute(
-        `
-        SELECT
-          u.id, u.email, u.name, u.created_at,
-          tp.phone, tp.about, tp.city, tp.country, tp.state_abbr,
-          tp.languages, tp.gender, tp.profile_image_url, tp.updated_at
-        FROM users u
-        LEFT JOIN traveler_profiles tp ON u.id = tp.traveler_id
-        WHERE u.id = ? AND u.role = 'TRAVELER'
-        `,
-        [travelerId]
-      );
+    const db = await getDB();
+    const usersCollection = db.collection('users');
+    const travelerProfilesCollection = db.collection('traveler_profiles');
 
-      if (!rows.length) return res.status(404).json({ error: 'Traveler not found' });
+    const user = await usersCollection.findOne({ _id: new ObjectId(travelerId), role: 'TRAVELER' });
+    if (!user) return res.status(404).json({ error: 'Traveler not found' });
 
-      const traveler = rows[0];
-      if (traveler.languages) {
-        traveler.languages = traveler.languages.split(',').map(s => s.trim()).filter(Boolean);
-      } else {
-        traveler.languages = [];
-      }
+    const profile = await travelerProfilesCollection.findOne({ traveler_id: new ObjectId(travelerId) });
 
-      return res.json({ traveler });
-    } finally {
-      conn.release();
-    }
+    const traveler = {
+      id: user._id.toString(),
+      email: user.email,
+      name: user.name,
+      created_at: user.created_at,
+      phone: profile?.phone || null,
+      about: profile?.about || null,
+      city: profile?.city || null,
+      country: profile?.country || null,
+      state_abbr: profile?.state_abbr || null,
+      languages: profile?.languages ? (Array.isArray(profile.languages) ? profile.languages : profile.languages.split(',').map(s => s.trim()).filter(Boolean)) : [],
+      gender: profile?.gender || null,
+      profile_image_url: profile?.profile_image_url || null,
+      updated_at: profile?.updated_at || null
+    };
+
+    return res.json({ traveler });
   } catch (err) {
     console.error('Get profile error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -71,80 +70,91 @@ router.put('/profile', ensureAuth, async (req, res) => {
     }
 
     const travelerId = req.session.traveler.id;
+    const db = await getDB();
+    const usersCollection = db.collection('users');
+    const travelerProfilesCollection = db.collection('traveler_profiles');
+    const travelerObjectId = new ObjectId(travelerId);
 
+    // Update user name if provided
+    if (value.name !== undefined) {
+      await usersCollection.updateOne(
+        { _id: travelerObjectId, role: 'TRAVELER' },
+        { $set: { name: value.name, updated_at: new Date() } }
+      );
+    }
+
+    // Prepare profile updates
+    const profileUpdates = {};
     const fieldMapping = {
       about_me: 'about',
       state: 'state_abbr',
       profile_picture: 'profile_image_url'
     };
 
-    const profileUpdates = [];
-    const profileParams = [];
-
     Object.keys(value).forEach((key) => {
-      if (key === 'name') return; 
+      if (key === 'name') return;
       const dbField = fieldMapping[key] || key;
-
       let v = value[key];
+      
       if (key === 'languages') {
-        v = Array.isArray(v) ? v.join(',') : v;
+        v = Array.isArray(v) ? v : (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
       }
+      
       if (key === 'profile_picture' && v === null) {
-        profileUpdates.push(`${dbField} = NULL`);
-      } else {
-        profileUpdates.push(`${dbField} = ?`);
-        profileParams.push(v);
+        profileUpdates[dbField] = null;
+      } else if (v !== undefined) {
+        profileUpdates[dbField] = v;
       }
     });
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.execute('INSERT IGNORE INTO traveler_profiles (traveler_id) VALUES (?)', [travelerId]);
-
-      if (value.name !== undefined) {
-        await conn.execute('UPDATE users SET name = ? WHERE id = ? AND role = "TRAVELER"', [
-          value.name,
-          travelerId
-        ]);
-      }
-
-      if (profileUpdates.length > 0) {
-        const sql = `UPDATE traveler_profiles SET ${profileUpdates.join(', ')} WHERE traveler_id = ?`;
-        await conn.execute(sql, [...profileParams, travelerId]);
-      }
-
-      const [rows] = await conn.execute(
-        `
-        SELECT
-          u.id, u.email, u.name, u.created_at,
-          tp.phone, tp.about, tp.city, tp.country, tp.state_abbr,
-          tp.languages, tp.gender, tp.profile_image_url, tp.updated_at
-        FROM users u
-        LEFT JOIN traveler_profiles tp ON u.id = tp.traveler_id
-        WHERE u.id = ? AND u.role = 'TRAVELER'
-        `,
-        [travelerId]
+    // Ensure profile exists, then update
+    if (Object.keys(profileUpdates).length > 0) {
+      profileUpdates.updated_at = new Date();
+      await travelerProfilesCollection.updateOne(
+        { traveler_id: travelerObjectId },
+        { $set: profileUpdates },
+        { upsert: true }
       );
-
-      const traveler = rows[0];
-      traveler.languages = traveler.languages
-        ? traveler.languages.split(',').map(s => s.trim()).filter(Boolean)
-        : [];
-
-      req.session.traveler = {
-        id: traveler.id,
-        email: traveler.email,
-        name: traveler.name,
-        role: 'TRAVELER'
-      };
-
-      return res.json({
-        message: 'Profile updated successfully',
-        traveler
-      });
-    } finally {
-      conn.release();
+    } else {
+      // Ensure profile exists even if no updates
+      await travelerProfilesCollection.updateOne(
+        { traveler_id: travelerObjectId },
+        { $setOnInsert: { traveler_id: travelerObjectId, created_at: new Date() } },
+        { upsert: true }
+      );
     }
+
+    // Fetch updated data
+    const user = await usersCollection.findOne({ _id: travelerObjectId, role: 'TRAVELER' });
+    const profile = await travelerProfilesCollection.findOne({ traveler_id: travelerObjectId });
+
+    const traveler = {
+      id: user._id.toString(),
+      email: user.email,
+      name: user.name,
+      created_at: user.created_at,
+      phone: profile?.phone || null,
+      about: profile?.about || null,
+      city: profile?.city || null,
+      country: profile?.country || null,
+      state_abbr: profile?.state_abbr || null,
+      languages: profile?.languages ? (Array.isArray(profile.languages) ? profile.languages : profile.languages.split(',').map(s => s.trim()).filter(Boolean)) : [],
+      gender: profile?.gender || null,
+      profile_image_url: profile?.profile_image_url || null,
+      updated_at: profile?.updated_at || null
+    };
+
+    req.session.traveler = {
+      id: traveler.id,
+      email: traveler.email,
+      name: traveler.name,
+      role: 'TRAVELER'
+    };
+
+    return res.json({
+      message: 'Profile updated successfully',
+      traveler
+    });
   } catch (err) {
     console.error('Update profile error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -158,22 +168,28 @@ router.post('/profile/picture', ensureAuth, uploadSingle('profile_picture'), asy
     const travelerId = req.session.traveler.id;
     const profilePicturePath = `/uploads/${req.file.filename}`;
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.execute('INSERT IGNORE INTO traveler_profiles (traveler_id) VALUES (?)', [travelerId]);
+    const db = await getDB();
+    const travelerProfilesCollection = db.collection('traveler_profiles');
 
-      await conn.execute(
-        'UPDATE traveler_profiles SET profile_image_url = ? WHERE traveler_id = ?',
-        [profilePicturePath, travelerId]
-      );
+    await travelerProfilesCollection.updateOne(
+      { traveler_id: new ObjectId(travelerId) },
+      { 
+        $set: { 
+          profile_image_url: profilePicturePath,
+          updated_at: new Date()
+        },
+        $setOnInsert: {
+          traveler_id: new ObjectId(travelerId),
+          created_at: new Date()
+        }
+      },
+      { upsert: true }
+    );
 
-      return res.json({
-        message: 'Profile picture uploaded successfully',
-        profile_picture: profilePicturePath
-      });
-    } finally {
-      conn.release();
-    }
+    return res.json({
+      message: 'Profile picture uploaded successfully',
+      profile_picture: profilePicturePath
+    });
   } catch (err) {
     console.error('Upload profile picture error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -182,41 +198,36 @@ router.post('/profile/picture', ensureAuth, uploadSingle('profile_picture'), asy
 
 router.get('/profile/:id', async (req, res) => {
   try {
-    const travelerId = req.params.id;
-
-    const conn = await pool.getConnection();
+    let travelerId;
     try {
-      const [rows] = await conn.execute(
-        `
-        SELECT
-          u.id,
-          u.name,
-          tp.about       AS about_me,
-          tp.city,
-          tp.state_abbr  AS state,
-          tp.country,
-          tp.languages,
-          tp.gender,
-          tp.profile_image_url AS profile_picture,
-          u.created_at
-        FROM users u
-        LEFT JOIN traveler_profiles tp ON u.id = tp.traveler_id
-        WHERE u.id = ? AND u.role = 'TRAVELER'
-        `,
-        [travelerId]
-      );
-
-      if (!rows.length) return res.status(404).json({ error: 'Traveler not found' });
-
-      const traveler = rows[0];
-      traveler.languages = traveler.languages
-        ? traveler.languages.split(',').map(s => s.trim()).filter(Boolean)
-        : [];
-
-      return res.json({ traveler });
-    } finally {
-      conn.release();
+      travelerId = new ObjectId(req.params.id);
+    } catch {
+      return res.status(400).json({ error: 'Invalid traveler ID' });
     }
+
+    const db = await getDB();
+    const usersCollection = db.collection('users');
+    const travelerProfilesCollection = db.collection('traveler_profiles');
+
+    const user = await usersCollection.findOne({ _id: travelerId, role: 'TRAVELER' });
+    if (!user) return res.status(404).json({ error: 'Traveler not found' });
+
+    const profile = await travelerProfilesCollection.findOne({ traveler_id: travelerId });
+
+    const traveler = {
+      id: user._id.toString(),
+      name: user.name,
+      about_me: profile?.about || null,
+      city: profile?.city || null,
+      state: profile?.state_abbr || null,
+      country: profile?.country || null,
+      languages: profile?.languages ? (Array.isArray(profile.languages) ? profile.languages : profile.languages.split(',').map(s => s.trim()).filter(Boolean)) : [],
+      gender: profile?.gender || null,
+      profile_picture: profile?.profile_image_url || null,
+      created_at: user.created_at
+    };
+
+    return res.json({ traveler });
   } catch (err) {
     console.error('Get public profile error:', err);
     return res.status(500).json({ error: 'Internal server error' });
