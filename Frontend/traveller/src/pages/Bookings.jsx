@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { mockProperties } from '../data/mockProperties';
+import { bookingsAPI } from '../services/api';
+import AIAgentPanel from '../components/AIAgentPanel';
 
 const Bookings = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const Bookings = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
   const [cancelling, setCancelling] = useState(null);
+  const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -24,31 +26,8 @@ const Bookings = () => {
   const loadBookings = async () => {
     try {
       setLoading(true);
-      
-      try {
-        const response = await bookingsAPI.getTravelerBookings(traveler.id);
-        setBookings(response.data.bookings);
-        return;
-      } catch (dbError) {
-        console.log('Database not available, using localStorage fallback:', dbError.message);
-      }
-      
-
-      const storedBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
-      
-      const enrichedBookings = storedBookings.map(booking => {
-        const property = mockProperties.find(p => p.id === booking.property_id);
-        return {
-          ...booking,
-          property_name: property?.name || 'Unknown Property',
-          property_location: property?.location || 'Unknown Location',
-          property_image: property?.image || '',
-          property_price: property?.price || 0,
-          owner_name: 'John Doe' 
-        };
-      });
-      
-      setBookings(enrichedBookings);
+      const response = await bookingsAPI.getTravelerBookings(traveler.id);
+      setBookings(response.data.bookings || []);
     } catch (err) {
       setError('Failed to load bookings');
       console.error('Error loading bookings:', err);
@@ -64,24 +43,8 @@ const Bookings = () => {
 
     try {
       setCancelling(bookingId);
-      
-      try {
-        await bookingsAPI.cancel(bookingId);
-        await loadBookings(); 
-        return;
-      } catch (dbError) {
-        console.log('Database not available, using localStorage fallback:', dbError.message);
-      }
-      
-      const storedBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
-      const updatedBookings = storedBookings.map(booking => 
-        booking.id === bookingId 
-          ? { ...booking, status: 'CANCELLED' }
-          : booking
-      );
-      localStorage.setItem('bookings', JSON.stringify(updatedBookings));
-      
-      await loadBookings(); 
+      await bookingsAPI.cancel(bookingId);
+      await loadBookings();
     } catch (err) {
       console.error('Error cancelling booking:', err);
       alert('Failed to cancel booking. Please try again.');
@@ -205,7 +168,11 @@ const Bookings = () => {
                 <div className="booking-image">
                   {booking.property_photo ? (
                     <img 
-                      src={booking.property_photo} 
+                      src={
+                        booking.property_photo.startsWith('http') 
+                          ? booking.property_photo 
+                          : `http://localhost:4000${booking.property_photo}`
+                      }
                       alt={booking.property_name}
                       onClick={() => navigate(`/property/${booking.property_id}`)}
                     />
@@ -611,7 +578,83 @@ const Bookings = () => {
             font-size: 14px;
           }
         }
+
+        .ai-agent-button {
+          position: fixed;
+          bottom: 30px;
+          right: 30px;
+          width: 60px;
+          height: 60px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border: none;
+          border-radius: 50%;
+          color: white;
+          font-size: 24px;
+          cursor: pointer;
+          box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+          transition: all 0.3s ease;
+          z-index: 999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .ai-agent-button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        .ai-agent-button:active {
+          transform: translateY(0);
+        }
+
+        .ai-agent-button .pulse {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          border-radius: 50%;
+          background: inherit;
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1.4);
+            opacity: 0;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .ai-agent-button {
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+          }
+        }
       `}</style>
+
+      <button 
+        className="ai-agent-button"
+        onClick={() => setIsAIAgentOpen(true)}
+        title="AI Travel Assistant"
+      >
+        <div className="pulse"></div>
+        🤖
+      </button>
+
+      <AIAgentPanel 
+        isOpen={isAIAgentOpen}
+        onClose={() => setIsAIAgentOpen(false)}
+        bookingId={null}
+      />
     </div>
   );
 };

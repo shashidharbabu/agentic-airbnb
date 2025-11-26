@@ -55,7 +55,7 @@ const Header = ({ isHomePage = false, onHostModalOpen }) => {
         <div className="header-right">
           <button 
             className="become-host-btn"
-            onClick={onHostModalOpen}
+            onClick={() => window.location.href = 'http://localhost:5174/login'}
           >
             Become a host
           </button>

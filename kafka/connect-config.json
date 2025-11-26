@@ -1,0 +1,16 @@
+{
+  "name": "airbnb-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "tasks.max": "1",
+    "connection.url": "jdbc:postgresql://localhost:5432/airbnb",
+    "connection.user": "airbnb_user",
+    "connection.password": "airbnb_pass",
+    "table.whitelist": "listings,bookings,users",
+    "mode": "incrementing",
+    "incrementing.column.name": "id",
+    "topic.prefix": "airbnb-",
+    "poll.interval.ms": "5000"
+  }
+}
+

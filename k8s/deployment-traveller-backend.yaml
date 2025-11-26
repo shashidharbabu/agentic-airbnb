@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traveller-backend
+  namespace: airbnb-system
+  labels:
+    app: traveller-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traveller-backend
+  template:
+    metadata:
+      labels:
+        app: traveller-backend
+    spec:
+      containers:
+      - name: traveller-backend
+        image: 829108230080.dkr.ecr.us-east-1.amazonaws.com/airbnb/traveller-backend:latest
+        imagePullPolicy: Always  # Pull from ECR
+        ports:
+        - containerPort: 5001
+          name: http
+        envFrom:
+        - configMapRef:
+            name: traveller-backend-config
+        - secretRef:
+            name: session-secrets
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+

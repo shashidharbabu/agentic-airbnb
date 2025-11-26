@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
-const { pool } = require('../db');
+const { ObjectId } = require('mongodb');
+const { getDB } = require('../db-mongodb');
 
 const router = express.Router();
 
@@ -8,17 +9,37 @@ const router = express.Router();
 router.get('/properties', async (req, res) => {
   try {
     const location = (req.query.location || '').toString();
-    const conn = await pool.getConnection();
-    try {
-      let sql = 'SELECT id, owner_id, name, description, location, address, price_per_night, bedrooms, bathrooms, amenities, availability_start, availability_end, created_at FROM properties';
-      const params = {};
-      const wheres = [];
-      if (location) { wheres.push('location LIKE :loc'); params.loc = `%${location}%`; }
-      if (wheres.length) sql += ' WHERE ' + wheres.join(' AND ');
-      sql += ' ORDER BY created_at DESC LIMIT 50';
-      const [rows] = await conn.execute(sql, params);
-      return res.json({ properties: rows });
-    } finally { conn.release(); }
+    const db = await getDB();
+    const propertiesCollection = db.collection('properties');
+
+    const query = {};
+    if (location) {
+      query.location = { $regex: location, $options: 'i' };
+    }
+
+    const properties = await propertiesCollection
+      .find(query)
+      .sort({ created_at: -1 })
+      .limit(50)
+      .toArray();
+
+    const formattedProperties = properties.map(prop => ({
+      id: prop._id.toString(),
+      owner_id: prop.owner_id ? (typeof prop.owner_id === 'object' ? prop.owner_id.toString() : prop.owner_id) : null,
+      name: prop.name,
+      description: prop.description,
+      location: prop.location,
+      address: prop.address,
+      price_per_night: prop.price_per_night,
+      bedrooms: prop.bedrooms,
+      bathrooms: prop.bathrooms,
+      amenities: Array.isArray(prop.amenities) ? prop.amenities : [],
+      availability_start: prop.availability_start,
+      availability_end: prop.availability_end,
+      created_at: prop.created_at
+    }));
+
+    return res.json({ properties: formattedProperties });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });
@@ -26,7 +47,7 @@ router.get('/properties', async (req, res) => {
 });
 
 const bookingSchema = Joi.object({
-  property_id: Joi.number().integer().required(),
+  property_id: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
   traveler_name: Joi.string().min(1).max(255).required(),
   traveler_email: Joi.string().email().required(),
   start_date: Joi.date().required(),
@@ -40,25 +61,33 @@ router.post('/bookings', async (req, res) => {
     const { error, value } = bookingSchema.validate(req.body);
     if (error) return res.status(400).json({ error: error.message });
 
-    const conn = await pool.getConnection();
-    try {
-      const [exists] = await conn.execute('SELECT id FROM properties WHERE id = :id', { id: value.property_id });
-      if (exists.length === 0) return res.status(404).json({ error: 'property_not_found' });
+    const db = await getDB();
+    const propertiesCollection = db.collection('properties');
+    const bookingsCollection = db.collection('bookings');
 
-      const [result] = await conn.execute(
-        `INSERT INTO bookings (property_id, traveler_name, traveler_email, start_date, end_date, guests, status)
-         VALUES (:pid, :name, :email, :start, :end, :guests, 'PENDING')`,
-        {
-          pid: value.property_id,
-          name: value.traveler_name,
-          email: value.traveler_email,
-          start: value.start_date,
-          end: value.end_date,
-          guests: value.guests
-        }
-      );
-      return res.json({ id: result.insertId });
-    } finally { conn.release(); }
+    let propertyId;
+    try {
+      propertyId = new ObjectId(value.property_id);
+    } catch {
+      return res.status(400).json({ error: 'invalid_property_id' });
+    }
+
+    const property = await propertiesCollection.findOne({ _id: propertyId });
+    if (!property) return res.status(404).json({ error: 'property_not_found' });
+
+    const result = await bookingsCollection.insertOne({
+      property_id: propertyId,
+      traveler_name: value.traveler_name,
+      traveler_email: value.traveler_email,
+      start_date: value.start_date,
+      end_date: value.end_date,
+      guests: value.guests,
+      status: 'PENDING',
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    return res.json({ id: result.insertedId.toString() });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });
@@ -68,17 +97,32 @@ router.post('/bookings', async (req, res) => {
 // GET /public/bookings/:id
 router.get('/bookings/:id', async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    const conn = await pool.getConnection();
+    let id;
     try {
-      const [rows] = await conn.execute(
-        `SELECT id, property_id, traveler_name, traveler_email, start_date, end_date, guests, status, created_at
-           FROM bookings WHERE id = :id`,
-        { id }
-      );
-      if (rows.length === 0) return res.status(404).json({ error: 'not_found' });
-      return res.json({ booking: rows[0] });
-    } finally { conn.release(); }
+      id = new ObjectId(req.params.id);
+    } catch {
+      return res.status(400).json({ error: 'invalid_id' });
+    }
+
+    const db = await getDB();
+    const bookingsCollection = db.collection('bookings');
+
+    const booking = await bookingsCollection.findOne({ _id: id });
+    if (!booking) return res.status(404).json({ error: 'not_found' });
+
+    const formattedBooking = {
+      id: booking._id.toString(),
+      property_id: booking.property_id ? (typeof booking.property_id === 'object' ? booking.property_id.toString() : booking.property_id) : null,
+      traveler_name: booking.traveler_name,
+      traveler_email: booking.traveler_email,
+      start_date: booking.start_date,
+      end_date: booking.end_date,
+      guests: booking.guests,
+      status: booking.status,
+      created_at: booking.created_at
+    };
+
+    return res.json({ booking: formattedBooking });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });

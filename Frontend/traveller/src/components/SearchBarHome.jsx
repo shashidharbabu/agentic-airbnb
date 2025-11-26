@@ -29,7 +29,7 @@ const SearchBarHome = () => {
 
   const handleSearch = () => {
     const totalGuests = guests.adults + guests.children;
-    navigate(`/dashboard?location=${location}&checkIn=${checkIn}&checkOut=${checkOut}&guests=${totalGuests}`);
+    navigate(`/dashboard?location=${encodeURIComponent(location)}&check_in=${checkIn}&check_out=${checkOut}&guests=${totalGuests}`);
   };
 
   const updateGuests = (type, increment) => {

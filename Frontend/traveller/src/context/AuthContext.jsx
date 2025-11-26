@@ -23,8 +23,25 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.checkAuth();
       if (response.data.authenticated) {
-        setTraveler(response.data.traveler);
-        localStorage.setItem('traveler', JSON.stringify(response.data.traveler));
+        const newTraveler = response.data.traveler;
+        // If user changed between sessions, purge any AI chat caches from previous user
+        try {
+          const lastUserId = localStorage.getItem('ai_last_user_id');
+          if (lastUserId && lastUserId !== String(newTraveler.id)) {
+            const keys = Object.keys(localStorage);
+            keys.forEach(key => {
+              if (key.startsWith('ai_chat') || key.startsWith('ai_context')) {
+                localStorage.removeItem(key);
+              }
+            });
+          }
+          localStorage.setItem('ai_last_user_id', String(newTraveler.id));
+        } catch (e) {
+          console.warn('AuthContext: Could not reconcile AI chat data for user switch on boot:', e);
+        }
+
+        setTraveler(newTraveler);
+        localStorage.setItem('traveler', JSON.stringify(newTraveler));
       } else {
         setTraveler(null);
         localStorage.removeItem('traveler');
@@ -68,8 +85,23 @@ export const AuthProvider = ({ children }) => {
       
       if (response.data.traveler) {
         console.log('AuthContext: Login successful, setting traveler');
+        // Purge any AI chat history from previous sessions/users before setting the new traveler
+        try {
+          const keys = Object.keys(localStorage);
+          keys.forEach(key => {
+            if (key.startsWith('ai_chat') || key.startsWith('ai_context')) {
+              localStorage.removeItem(key);
+            }
+          });
+        } catch (e) {
+          console.warn('AuthContext: Could not clear previous AI chat data on login:', e);
+        }
+
         setTraveler(response.data.traveler);
         localStorage.setItem('traveler', JSON.stringify(response.data.traveler));
+        try {
+          localStorage.setItem('ai_last_user_id', String(response.data.traveler.id));
+        } catch {}
         
         return { success: true, data: response.data };
       }
@@ -113,6 +145,16 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setTraveler(null);
       localStorage.removeItem('traveler');
+      try {
+        // Clear all AI chat data (legacy and v2) and last user marker
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+          if (key.startsWith('ai_chat') || key.startsWith('ai_context')) {
+            localStorage.removeItem(key);
+          }
+        });
+        localStorage.removeItem('ai_last_user_id');
+      } catch {}
     }
   };
 

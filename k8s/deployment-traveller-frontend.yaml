@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traveller-frontend
+  namespace: airbnb-system
+  labels:
+    app: traveller-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traveller-frontend
+  template:
+    metadata:
+      labels:
+        app: traveller-frontend
+    spec:
+      containers:
+      - name: traveller-frontend
+        image: 829108230080.dkr.ecr.us-east-1.amazonaws.com/airbnb/traveller-frontend:latest
+        imagePullPolicy: Always  # Pull from ECR
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+

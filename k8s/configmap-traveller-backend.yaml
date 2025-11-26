@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traveller-backend-config
+  namespace: airbnb-system
+data:
+  PORT: "5001"
+  NODE_ENV: "production"
+  WEB_ORIGIN: "http://abe6856d8cc9d449eb0e420eef657eb2-612137670.us-east-1.elb.amazonaws.com"
+  UPLOAD_DIR: "uploads"
+  MAX_FILE_SIZE: "5242880"
+  DOCKER_ENV: "true"
+  DB_HOST: "mongodb-service"
+  DB_PORT: "27017"
+  DB_NAME: "airbnb_core"
+  DB_USER: "admin"
+  KAFKA_BROKER: "kafka-service:9092"
+  ADDITIONAL_CORS_ORIGINS: "http://localhost:5174,http://localhost:5173,http://localhost:30073,http://a7a83e8e4cc8843009bccdfeda27b3fa-80434930.us-east-1.elb.amazonaws.com"
+
