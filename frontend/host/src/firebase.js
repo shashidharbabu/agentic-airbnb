@@ -3,7 +3,7 @@ import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAToO5fEazdW4aTzznpJbIde9lqheb3fjc",
+  apiKey: "",
   authDomain: "airbnb-host-auth-5bdc1.firebaseapp.com",
   projectId: "airbnb-host-auth-5bdc1",
   storageBucket: "airbnb-host-auth-5bdc1.firebasestorage.app",
