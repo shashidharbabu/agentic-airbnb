@@ -4,5 +4,5 @@ pip install -U langchain langchain-openai
 
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
-LANGCHAIN_API_KEY="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"
+LANGCHAIN_API_KEY=""
 LANGCHAIN_PROJECT="Agent"
